@@ -1,0 +1,7 @@
+Analysis/R/Rcache
+Figs/*.pdf
+SuppFigs/*.pdf
+*.Rout
+ProcessedFiles/
+Analysis/OrigData/*.RData
+Analysis/FinalData/*.csv
