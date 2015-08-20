@@ -5,3 +5,5 @@ SuppFigs/*.pdf
 ProcessedFiles/
 Analysis/OrigData/*.RData
 Analysis/FinalData/*.csv
+Analysis/FinalData/*.RData
+SuppTables/*.tex
