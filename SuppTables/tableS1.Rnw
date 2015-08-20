@@ -1,0 +1,12 @@
+<<load_duplicates,echo=FALSE,results="hide">>=
+attach("../Analysis/R/Rcache/dnadup.RData")
+colnames(dnadup) <- c("Mouse 1", "Mouse 2", "No. matches", "No. typed markers", "% mismatches")
+library(xtable)
+@ 
+
+<<dnadup_table, echo=FALSE, results="asis">>=
+print(xtable(dnadup, digits=c(rep(0, ncol(dnadup)), 1), align=rep("c", ncol(dnadup)+1),
+             caption="Duplicate DNA samples"), 
+      include.rownames=FALSE, table.placement="p",
+      caption.placement="top")
+@ 

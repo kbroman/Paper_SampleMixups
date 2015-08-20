@@ -1,0 +1,13 @@
+<<load_num_corr_probes,echo=FALSE,results="hide">>=
+attach("../Analysis/R/Rcache/expr_corr_counts.RData")
+colnames(tab)[c(3,5,6)] <- paste0(colnames(tab)[c(3,5,6)], "0")
+colnames(tab) <- c("Tissue 1", "Tissue 2", paste("corr >", colnames(tab)[-(1:2)]))
+library(xtable)
+@ 
+
+<<num_corr_probes_table, echo=FALSE, results="asis">>=
+print(xtable(tab, digits=0, align=rep("c", ncol(tab)+1),
+             caption="Numbers of probes, for each tissue pair, with large between-tissue correlation"), 
+      include.rownames=FALSE, table.placement="p",
+      caption.placement="top")
+@ 

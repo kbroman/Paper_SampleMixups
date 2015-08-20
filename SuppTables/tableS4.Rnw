@@ -1,0 +1,21 @@
+<<load_agouti_tab,echo=FALSE,results="hide">>=
+attach("../Analysis/R/Rcache/agouti_tab.RData")
+@
+
+\begin{table}[p]
+\caption{Genotype versus phenotype at the agouti locus}
+\begin{center}
+\begin{tabular}{ccccccc} \hline
+ &\hspace*{5mm}& \multicolumn{2}{c}{Original} &\hspace*{5mm}& \multicolumn{2}{c}{Corrected} \\ \cline{3-4}\cline{6-7}
+ &\hspace*{5mm}& \multicolumn{2}{c}{Coat color} &\hspace*{5mm}& \multicolumn{2}{c}{Coat color} \\ \cline{3-4}\cline{6-7}
+Chr 2 genotype && Tan & Black && Tan & Black \\ \hline
+ BB && \Sexpr{tab.o[1,1]} & \Sexpr{tab.o[1,2]} && \Sexpr{tab.n[1,1]} & \Sexpr{tab.n[1,2]} \\ 
+ BR && \Sexpr{tab.o[2,1]} & \Sexpr{tab.o[2,2]} && \Sexpr{tab.n[2,1]} & \Sexpr{tab.n[2,2]} \\ 
+ RR && \Sexpr{tab.o[3,1]} & \Sexpr{tab.o[3,2]} && \Sexpr{tab.n[3,1]} & \Sexpr{tab.n[3,2]} \\ \hline
+\end{tabular}
+
+\bigskip
+
+B = B6 allele; R = BTBR allele
+\end{center}
+\end{table}

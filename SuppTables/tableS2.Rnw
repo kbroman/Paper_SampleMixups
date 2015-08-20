@@ -1,0 +1,12 @@
+<<load_array_counts,echo=FALSE,results="hide">>=
+attach("../Analysis/R/Rcache/expr_tab.RData")
+expr.tab <- cbind(Tissue=rownames(expr.tab), expr.tab)
+library(xtable)
+@ 
+
+<<array_counts_table, echo=FALSE, results="asis">>=
+print(xtable(expr.tab, digits=0, align=rep("c", ncol(expr.tab)+1),
+             caption="Numbers of gene expression arrays"), 
+      include.rownames=FALSE, table.placement="p",
+      caption.placement="top")
+@ 
