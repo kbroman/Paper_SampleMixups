@@ -1,0 +1,2900 @@
+Sample mixups in Attie eQTL data
+================================
+Karl W Broman <kbroman@biostat.wisc.edu>
+12 Sept 2012; revised 18 Oct 2012; revised 28 Feb 2013 and 10 Apr 2013
+:toc2:
+:numbered:
+:data-uri:
+
+
+== Introduction ==
+
+This document contains the details of my re-analysis of the sample
+mixups in the Attie eQTL data, to accompany the manuscript describing
+the work.
+
+I will suppress much of the R code from the html version of this
+document; for details, see the asciidoc source file.
+
+<<options,echo=FALSE,results=hide>>=
+options(width=132, digits=3, scipen=4)
+set.seed(62896949)
+@
+
+Here are the versions of R and the packages that I'm using:
+
+<<loadqtllib>>=
+R.version$version.string
+library(qtl)
+qtlversion()
+library(lineup)
+lineupversion()
+library(broman)
+bromanversion()
+library(ascii)
+paste(unlist(packageVersion("ascii")), collapse=".") # ascii version
+@
+
+<<create_tissue_info, results=hide, echo=FALSE>>=
+# tissues
+tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
+tissues.short <- substr(tissues, 1, 1)
+n.tissuepairs <- choose(length(tissues), 2)
+tissuepairs <- data.frame(tissue1=rep("", n.tissuepairs),
+                          tissue2=rep("", n.tissuepairs),
+                          ntissue1=rep(-1, n.tissuepairs),
+                          ntissue2=rep(-1, n.tissuepairs),
+                          short=rep("", n.tissuepairs),
+                          stringsAsFactors=FALSE)
+k <- 1
+for(i in 1:(length(tissues)-1)) {
+  for(j in (i+1):length(tissues)) {
+    tissuepairs[k,1] <- tissues[i]
+    tissuepairs[k,2] <- tissues[j]
+    tissuepairs[k,3] <- i
+    tissuepairs[k,4] <- j
+    tissuepairs[k,5] <- paste0(tissues.short[i], tissues.short[j])
+    k <- k + 1
+  }
+}
+arr <- paste.(tissues, "mlratio")
+names(arr) <- tissues
+save(tissues, tissues.short, tissuepairs, arr, file="tissue_text.RData")
+@
+
+== Preliminary data cleaning ==
+
+=== Genotype data ===
+
+<<load_genotypes, echo=FALSE, results=hide>>=
+attach("../OrigData/rawg.RData")
+attach("../OrigData/clean_cross.RData")
+omitted <- read.csv("omitted_samples.csv", as.is=TRUE)
+# two samples omitted from kidney based on the sample mixup analysis;
+#   (looked like dups); retain for now
+omitted <- omitted[is.na(match(omitted$MouseNum, c("Mouse3484", "Mouse3503"))),]
+n.blank.dna <- sum(omitted$Tissue=="DNA" & omitted$Note=="blank")
+n.omit.dna <- sum(omitted$Tissue=="DNA" & omitted$Note!="blank")
+@
+
+There were originally \Sexpr{sum(rawg$pheno$Strain=="F2") + n.blank.dna}
+mice.  There were \Sexpr{n.blank.dna} mice with failed
+genotypes.  We omitted the genotypes for another \Sexpr{n.omit.dna}
+mice, as the genotype data were bad.  (They showed a high rate of
+apparent genotyping errors, an unusually large proportion of
+homozygous gneotypes, and many apparent crossovers.)  That leaves \Sexpr{nind(f2g)}
+mice with genotype data.
+
+The genotype data were cleaned to remove markers not segregating in
+the cross, to correctly align the BTBR and B6 alleles, and to remove
+some badly behaved markers (data not shown).  Remaining
+were \Sexpr{totmar(f2g)} markers, including \Sexpr{nmar(f2g)["X"]} on
+the X chromosome.
+
+==== Sex swaps ====
+
+The cross performed was (BTBR &times; B6) &times; (BTBR &times; B6), with females listed
+first.  Thus, females should be homozygous BTBR or heterozygous while
+males are hemizygous B6 or BTBR.
+
+We identified \Sexpr{sum(f2g$pheno$SexID != f2g$pheno$Sex)} mice whose
+X chromosome genotypes didn't match their sex: There were
+\Sexpr{sum(f2g$pheno$SexID != f2g$pheno$Sex & f2g$pheno$SexID == "Female")}
+females whose genotype data indicated them to be males (many
+homogyzous B6 calls and no hets)
+and
+\Sexpr{sum(f2g$pheno$SexID != f2g$pheno$Sex & f2g$pheno$SexID == "Male")}
+males whose genotype data indicated them to be females (many
+heterozygous calls).
+
+There are \Sexpr{sum(apply(f2g$geno[["X"]]$data, 1, function(a) mean(a==1, na.rm=TRUE)) == 1)}
+mice with BTBR homozygous calls for the entire X chromosome, which is
+compatible with both sexes.
+
+<<sex_swaps, echo=FALSE, results=hide>>=
+m2f <- as.character(f2g$pheno$MouseNum)[f2g$pheno$SexID == "Male" & f2g$pheno$Sex == "Female"]
+f2m <- as.character(f2g$pheno$MouseNum)[f2g$pheno$SexID == "Female" & f2g$pheno$Sex == "Male"]
+x.f2m <- rawg$geno[["X"]]$data[!is.na(match(as.character(rawg$pheno$MouseNum), f2m)),]
+x.m2f <- rawg$geno[["X"]]$data[!is.na(match(as.character(rawg$pheno$MouseNum), m2f)),]
+@
+
+==== Sample duplicates ====
+
+<<find_dna_dups, echo=FALSE, results=hide>>=
+file <- "Rcache/comparegeno.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  # raw genotypes, but keep only the markers that are in the clean data
+  temp <- subset(rawg, ind=(rawg$pheno$Strain=="F2"))
+  temp <- pull.markers(temp, markernames(f2g))
+  # compare genotypes using autosomal markers
+  cg <- comparegeno(temp["-X",], what="both")
+  save(cg, file=file)
+}
+wh <- which(cg <= 1 & cg > 0.9, arr=TRUE)
+wh <- wh[,2:1]
+rawg <- subset(rawg, ind=(rawg$pheno$Strain=="F2"))
+dnadup <- as.data.frame(matrix(as.character(rawg$pheno$MouseNum)[wh], ncol=2))
+colnames(dnadup) <- c("Mouse1", "Mouse2")
+num.match <- num.typed <- rep(NA, nrow(wh))
+for(i in 1:nrow(wh)) {
+  num.match[i] <- cg[wh[i,1], wh[i,2]]
+  num.typed[i] <- cg[wh[i,1], wh[i,2]]/cg[wh[i,2], wh[i,1]]
+}
+dnadup <- cbind(dnadup, num.match, num.typed, prop.mismatch=(1-num.match/num.typed)*100)
+names(dnadup)[3:5] <- c("# matches", "# typed", "% mismatches")
+
+# sort
+dnadup[,1:2] <- t(apply(dnadup[,1:2], 1, sort))
+dnadup <- dnadup[order(dnadup[,1]),]
+save(dnadup, file="Rcache/dnadup.RData")
+@
+
+
+We identified \Sexpr{nrow(dnadup)} pairs of clear sample duplicates in
+the genotype data.
+
+<<dna_dup, echo=FALSE, results=ascii>>=
+ascii(dnadup, digits=c(0, 0, 0, 0, 1), include.rownames=FALSE,
+      align="c")
+@
+
+One pair, Mouse3267 and Mouse3362, were actually omitted from the
+genotype data as being badly behaved.
+
+
+
+<<begin_calls_table,echo=FALSE>>=
+# begin forming a table of calls, of which sample is which
+mice <- c(as.character(f2g$pheno$MouseNum), omitted$MouseNum)
+mice <- sort(unique(mice))
+calls <- matrix("", nrow=length(mice), ncol=length(tissues)+1)
+dimnames(calls) <- list(mice, c(tissues, "DNA"))
+
+for(i in c(tissues, "DNA"))
+  calls[omitted$MouseNum[omitted$Tissue==i], i] <- "omit"
+
+for(i in 1:nrow(dnadup)) {
+  if(calls[dnadup[i,2],7] != "omit")
+    calls[dnadup[i,2],7] <- paste("dup", dnadup[i,1], sep="")
+  else
+    calls[dnadup[i,2],7] <- "omit_and_dup"
+
+  if(calls[dnadup[i,1],7] == "omit")
+    calls[dnadup[i,1],7] <- "omit_and_dup"
+}
+@
+
+We omit one individual from each pair from the genotype data.
+
+<<drop_dup_geno, echo=FALSE, results=hide>>=
+file <- "Rcache/f2g.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  f2g <- subset(f2g, chr="-un", ind=is.na(match(f2g$pheno$MouseNum, dnadup[,2])))
+  save(f2g, newmap, pmap, file=file)
+}
+@
+
+
+
+=== Gene expression data ===
+
+<<load_and_count_arrays, echo=FALSE, results=hide>>=
+narr <- rep(NA, length(tissues))
+names(narr) <- tissues
+nomit.expr <- narr
+
+for(i in tissues) {
+  ifile <- paste0("../OrigData/F2.mlratio.", i, ".RData")
+  load(ifile)
+
+  narr[i] <- ncol(get(arr[i]))
+  calls[is.na(match(rownames(calls), colnames(get(arr[i])))), i] <- "ND"
+  nomit.expr[i] <- sum(omitted$Tissue==i)
+
+  keep <- rownames(calls)[calls[,i] == ""]
+  assign(arr[i], t(get(arr[i])[,keep]))
+}
+expr.tab <- data.frame(narr, nomit.expr, narr-nomit.expr)
+dimnames(expr.tab) <- list(tissues, c("# arrays", "# omitted", "# kept"))
+save(expr.tab, file="Rcache/expr_tab.RData")
+
+file <- "Rcache/mlratios.RData"
+if(!file.exists(file))
+  save(adipose.mlratio, gastroc.mlratio, hypo.mlratio, islet.mlratio,
+       kidney.mlratio, liver.mlratio, file=file)
+
+# bad hypo arrays, included here, but let's count them
+rowmed <- apply(hypo.mlratio, 1, function(a) median(a[a > -2 & a < 2], na.rm=TRUE))
+n.badhypo <- sum(rowmed > 0.016)
+@
+
+We have gene expression microarray data on six tissues: adipose,
+gastroc, hypo, islet, kidney, and liver.  These were two-color Agilent
+arrays, with the probes being 60-mers.  For each array, one color was
+a tissue-specific pool and the other was an individual sample.  The
+expression levels were quantified as the &ldquo;mlratio&rdquo;, which is
+approximately the log~10~ ratio of the individual to the pool, though
+with some corrections that I don't fully understand, and with values
+always between -2 and +2.
+
+There were approximately 500 expression arrays performed for each
+tissue.  A number of outlying arrays were omitted from each group.
+For hypo, there was an additional batch of \Sexpr{n.badhypo} poorly
+behaved arrays that were omitted in later analyses, but they are
+included here as they contain a number of detectable sample mixups.
+
+<<expr_array_table, echo=FALSE, results=ascii>>=
+ascii(expr.tab, digits=0, align="c")
+@
+
+== Lining up expression arrays ==
+
+In this section, we line up the expression arrays.
+
+The first step is to identify probes that are correlated between
+tissues.  (For each array, there is a total of
+\Sexpr{ncol(islet.mlratio)} probes.)  For each pair of arrays, we find the samples that are in
+common and calculate the correlation between tissues for each probe.
+
+<<calc_expr_corr, echo=FALSE, results=hide>>=
+file <- "Rcache/expr_corr.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  expr.corr <- matrix(ncol=nrow(tissuepairs), nrow=ncol(get(arr[1])))
+  colnames(expr.corr) <- tissuepairs$short
+  for(i in 1:nrow(tissuepairs)) {
+    arr1 <- arr[tissuepairs[i,1]]
+    arr2 <- arr[tissuepairs[i,2]]
+
+    id <- findCommonID(rownames(get(arr1)), rownames(get(arr2)))
+    expr.corr[,i] <- corbetw2mat(get(arr1)[id$first,], get(arr2)[id$second,], "paired")
+  }
+  save(expr.corr, file=file)
+}
+@
+
+The following figure contains density estimates of the correlation
+distributions for the 15 pairs of tissues.
+
+<<corr_dist, fig=TRUE, height=7, echo=FALSE, results=hide>>=
+par(mar=c(5.1,0.6,0.6,0.6))
+d <- vector("list", 15)
+for(i in 1:15) d[[i]] <- density(expr.corr[,i], from=-1, to=1, n=1024)
+yl <- c(0, 1.05*max(sapply(d, function(a) max(a$y))))
+plot(d[[1]]$x, d[[1]]$y, type="l", yaxs="i", ylim=yl,
+     xlab="Correlation", ylab="", yaxt="n")
+for(i in 2:length(d))
+  lines(d[[i]]$x, d[[i]]$y)
+@
+
+Here are counts, for each tissue pair, of probes with large
+between-tissue correlation.
+
+<<expr_corr_counts, echo=FALSE, results=ascii>>=
+tab <- cbind(tissuepairs[,1:2],
+             "0.7"=colSums(expr.corr > 0.7),
+             "0.75"=colSums(expr.corr > 0.75),
+             "0.8"=colSums(expr.corr > 0.8),
+             "0.9"=colSums(expr.corr > 0.9))
+ascii(tab, digits=0, align="c", colnames=c("Tissue1", "Tissue2",
+      "corr > 0.7", "corr > 0.75", "corr > 0.8", "corr > 0.9"), include.rownames=FALSE)
+save(tab, file="Rcache/expr_corr_counts.RData")
+@
+
+<<expr_corr_between_tissues, echo=FALSE, results=hide>>=
+file <- "Rcache/expr_corr_betw_tissues.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  d <- vector("list", length(tissues))
+  names(d) <- tissues
+  for(i in tissues) {
+    d[[i]] <- vector("list", 5)
+    names(d[[i]]) <- tissues[tissues != i]
+    for(j in names(d[[i]])) {
+      cat("\t", j, "\n")
+      tpr <- which((tissuepairs[,1]==i & tissuepairs[,2]==j) |
+                   (tissuepairs[,1]==j & tissuepairs[,2]==i))
+
+      d[[i]][[j]] <- distee(get(arr[i])[,expr.corr[,tpr]>0.75], get(arr[j])[,expr.corr[,tpr] > 0.75], d.method="cor")
+    }
+
+  }
+  dcs <- lapply(d, combinedist)
+  save(d, dcs, file=file)
+}
+@
+
+<<expr_tissue_summaries, echo=FALSE, results=hide>>=
+file <- "Rcache/expr_mixup_summaries.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  mx <- lapply(dcs, apply, 1, max, na.rm=TRUE)
+  sec <- lapply(dcs, apply, 1, function(a) sort(a, decreasing=TRUE)[2]) # second best by row
+  themx <- self <- mx
+  for(i in tissues) {
+    m <- match(rownames(dcs[[i]]), colnames(dcs[[i]]))
+    self[[i]] <- rep(NA, length(mx[[i]]))
+    for(j in seq(along=m)) {
+      if(is.na(m[j])) self[[i]][j] <- NA
+      else self[[i]][j] <- dcs[[i]][j,m[j]]
+    }
+
+    themx[[i]] <- apply(dcs[[i]], 1, function(a) which(!is.na(a) & a==max(a, na.rm=TRUE)))
+    themx[[i]] <- colnames(dcs[[i]])[themx[[i]]]
+    names(themx[[i]]) <- names(self[[i]]) <- names(mx[[i]])
+  }
+  save(mx, sec, self, themx, file=file)
+}
+self.min <- min(unlist(self), na.rm=TRUE)
+mx.min <- min(unlist(mx), na.rm=TRUE)
+@
+
+For each pair of tissues, we select the probes with between-tissue
+correlation > 0.75 and then calculate the between-individual
+correlations (the correlation between an individual in one tissue and
+an individual in the second tissue), using that subset of probes.
+
+The selection of probes with high cross-tissue correlation is intended
+to pull out probes with strong signal.  The between-individual
+correlations indicates the appropriate alignment of samples.
+
+Then, for each tissue, we summarize the five correlation matrices,
+comparing that tissue to each other tissue, by taking, for each pair
+of individuals, the median of the five tissue-tissue correlations.
+This relies on the assumption that different samples are mixed up
+in the different tissues.
+
+=== Adipose ===
+
+There were \Sexpr{nrow(adipose.mlratio)} individuals assayed for
+adipose expression, after omitting \Sexpr{expr.tab["adipose",2]} bad
+arrays.  The analysis described above produces a
+\Sexpr{nrow(dcs[["adipose"]])} &times; \Sexpr{ncol(dcs[["adipose"]])} of
+median correlations, with the rows corresponding to the adipose
+samples.
+
+<<count_adipose_expr_problems, echo=FALSE, results=hide>>=
+n.adipose.problems <- sum(pulldiag(dcs$adipose) < 0.5)
+@
+
+The following figure contains histograms of the self-self correlations
+and self-non self correlations (or really medians of correlations).
+The self-self correlations are mostly large, but there are
+\Sexpr{n.adipose.problems} samples with median self-self
+correlations < 0.5.  The two modes in the self-nonself correlations
+correspond to mixed-sex and same-sex pairs.
+
+<<adipose_expr_hist_fig, fig=TRUE, height=8, echo=FALSE, results=hide>>=
+plot(dcs$adipose)
+@
+
+For each row, we pull out the maximum correlation (or really the
+maximum of the median correlations); in the following, we plot the
+self-self correlations against these maxima.  For most samples, the
+self-self correlation is the maximum; these samples appear to be
+aligned correctly.  The \Sexpr{n.adipose.problems}
+samples with problems are highlighted in green, and we indicate the
+sample label and then what we infer to be the correct label.
+
+<<adipose_expr_selfmax_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+grayplot(self$adipose, mx$adipose, xlab="Self-self correlation",
+     ylab="Self-max correlation", las=1, main="Adipose expression",
+     xlim=c(self.min, 1), ylim=c(mx.min, 1),
+     vlines=seq(-0.2, 1, by=0.1), hlines=seq(0.5, 1, by=0.1))
+abline(0,1, col="white", lwd=2)
+wh <- which(self$adipose < mx$adipose)
+points(self$adipose[wh], mx$adipose[wh], pch=21, bg="green")
+vadj <- c(0,0,0,0.01, -0.01)
+lab <- paste(names(self$adipose)[wh], "->", themx$adipose[wh])
+u <- par("usr")
+labadj <- 0.013*diff(u[1:2])
+text(self$adipose[wh] + labadj, mx$adipose[wh] + vadj, lab,
+     adj=c(0, 0.5), col="blue")
+@
+
+For the \Sexpr{n.adipose.problems} problem samples, the self-self
+correlation is low but in each case there is another sample for which
+correlation is high.  We infer that Mouse3583 and Mouse3584 were
+swapped, and then there is a rotated trio, Mouse3187 &rarr; Mouse3188 &rarr;
+Mouse3200 &rarr; Mouse3187.
+
+<<adipose_expr_calls, echo=FALSE, results=hide>>=
+wh <- which(self$adipose < mx$adipose)
+for(i in wh)
+  calls[names(themx$adipose)[i],"adipose"] <- themx$adipose[i]
+@
+
+.Scatterplots
+
+Let's look at detailed scatterplots of the expression data for the
+sample swaps.  We pull out the probes that show correlation > 0.6
+between adipose and at least one other tissue, and then make a scatter
+plot of a sample from one tissue against a sample from the second tissue.
+Points correspond to probes, with the sizes of the points
+indicating the probes' correlations, across individuals, for that pair
+of tissues.
+
+First, Mouse3583 and Mouse3584.  You can see that, in all tissues,  Mouse3583 is
+not correlated with itself but is correlated with Mouse3584, and vice
+versa.
+
+
+
+<<adipose_3583_v_3584, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+corrcolor <- function(rho, cuts=c(-1, 0.55, 0.7, 1),
+                      col=c("red", "black", "blue"))
+  col[as.numeric(cut(rho, cuts))]
+
+mice <- c("Mouse3583", "Mouse3584")
+tissue1 <- "adipose"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Now the rotated trio, Mouse3187 &rarr; Mouse3188 &rarr;
+Mouse3200 &rarr; Mouse3187.  Note that Mouse3188 was swapped with
+Mouse3179 in hypo (see xref:hypo_expr[below]).  Mouse3187 in hypo
+seems correct but poorly behaved.  Mouse3187 and Mouse3188 were not
+assayed for kidney expression.
+
+<<adipose_3187_3188_3200, fig=TRUE, height=16, width=16, echo=FALSE, results=hide>>=
+mice1 <- c("Mouse3187", "Mouse3187", "Mouse3187", "Mouse3188", "Mouse3188", "Mouse3200", "Mouse3200")
+mice2 <- c("Mouse3187", "Mouse3188", "Mouse3179", "Mouse3188", "Mouse3200", "Mouse3200", "Mouse3187")
+tissue1 <- "adipose"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(7,length(tissue2)), las=1, mar=c(5.1,4.1,0.6,0.6))
+for(k in seq(along=mice1)) {
+  m1 <- mice1[k]
+  m2 <- mice2[k]
+  for(i in tissue2) {
+    if(m2 %in% rownames(get(arr[i]))) {
+      grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+           cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i",
+           xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+      rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+      text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+    }
+    else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+    title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+    title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+  }
+}
+@
+
+=== Gastroc ===
+
+There were \Sexpr{nrow(gastroc.mlratio)} individuals assayed for
+gastroc expression, after omitting \Sexpr{expr.tab["gastroc",2]} bad
+arrays.
+
+<<count_gastroc_expr_problems, echo=FALSE, results=hide>>=
+n.gastroc.problems <- sum(pulldiag(dcs$gastroc) < 0.5)
+@
+
+We jump to the plot of the self-self correlations versus the maximum correlation.
+Again, for most samples, the
+self-self correlation is the maximum; these samples appear to be
+aligned correctly.  The \Sexpr{n.gastroc.problems}
+samples with problems are highlighted in green, and we indicate the
+sample label and then what we infer to be the correct label.
+
+
+<<gastroc_expr_selfmax_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+grayplot(self$gastroc, mx$gastroc, xlab="Self-self correlation",
+     ylab="Self-max correlation", las=1, main="Gastroc expression",
+     xlim=c(self.min, 1), ylim=c(mx.min, 1),
+     vlines=seq(-0.2, 1, by=0.1), hlines=seq(0.5, 1, by=0.1))
+abline(0,1, col="white", lwd=2)
+wh1 <- which(self$gastroc < mx$gastroc & self$gastroc < 0.5)
+wh2 <- which(self$gastroc < mx$gastroc & self$gastroc > 0.5)
+points(self$gastroc[wh1], mx$gastroc[wh1], pch=21, bg="green")
+points(self$gastroc[wh2], mx$gastroc[wh2], pch=21, bg="orange")
+lab <- paste(names(self$gastroc)[wh1], "->", themx$gastroc[wh1])
+u <- par("usr")
+labadj <- 0.013*diff(u[1:2])
+text(self$gastroc[wh1] + labadj, mx$gastroc[wh1], lab,
+     adj=c(0, 0.5), col="blue")
+text(self$gastroc[wh2] - labadj, mx$gastroc[wh2], names(self$gastroc)[wh2],
+     adj=c(1, 0.5), col="blue")
+@
+
+There is an additional potential problem highlighted in orange, having
+low self-self correlation, and being slightly more correlated to
+another sample than to itself. But this is Mouse3188, which was
+involved in sample mix-ups in both adipose and hypo.  We believe it's
+correctly labeled in gastroc.
+
+The \Sexpr{n.gastroc.problems} problem samples are inferred to be a
+sample swap, Mouse3655 &harr; Mouse3659.
+
+<<gastroc_expr_calls, echo=FALSE, results=hide>>=
+wh <- which(self$gastroc < mx$gastroc & self$gastroc < 0.5)
+for(i in wh)
+  calls[names(themx$gastroc)[i],"gastroc"] <- themx$gastroc[i]
+@
+
+.Scatterplots
+
+Let's look at detailed scatterplots of the expression data for the
+sample swap, Mouse3655 and Mouse3659.  You can see that, in all tissues,  Mouse3655 is
+not correlated with itself but is correlated with Mouse3659, and vice
+versa.
+
+<<gastroc_3655_v_3659, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3655", "Mouse3659")
+tissue1 <- "gastroc"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+
+=== Hypo [[hypo_expr]] ===
+
+There were \Sexpr{nrow(hypo.mlratio)} individuals assayed for
+hypo expression, after omitting \Sexpr{expr.tab["hypo",2]} bad
+array.
+
+<<count_hypo_expr_problems, echo=FALSE, results=hide>>=
+n.hypo.problems <- sum(self$hypo < mx$hypo)
+@
+
+Here is the plot of the self-self correlations versus the maximum correlation.
+Again, for most samples, the
+self-self correlation is the maximum; these samples appear to be
+aligned correctly.  The \Sexpr{n.hypo.problems}
+samples with problems are highlighted in green, but there are too many
+to attach labels.
+
+<<hypo_expr_selfmax_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+grayplot(self$hypo, mx$hypo, xlab="Self-self correlation",
+     ylab="Self-max correlation", las=1, main="Hypo expression",
+     xlim=c(self.min, 1), ylim=c(mx.min, 1),
+     vlines=seq(-0.2, 1, by=0.1), hlines=seq(0.5, 1, by=0.1))
+abline(0,1, col="white", lwd=2)
+wh <- which(self$hypo < mx$hypo)
+points(self$hypo[wh], mx$hypo[wh], pch=21, bg="green")
+@
+
+Here are the summary statistics for the problems.
+<<hypo_expr_summary, echo=FALSE, results=ascii>>=
+temp <- summary(dcs$hypo, reorder="align")$byrow[,c(1,3,6)]
+ascii(temp, digits=2, align="c", colnames=c("maximum corr", "self corr",
+      "Inferred label"))
+@
+
+Mouse3589 and Mouse3590 have reasonably high self-self correlation
+(\Sexpr{round(mean(self$hypo[c("Mouse3589", "Mouse3590")]),1)})
+but are each much more highly correlated to the other
+(\Sexpr{round(mean(mx$hypo[c("Mouse3589", "Mouse3590")]),1)}).
+
+We infer a set of nine sample swaps:
+
+<<hypo_expr_swap_summary, echo=FALSE, results=ascii>>=
+temp <- rbind("Mouse3179 &harr; Mouse3188",
+              "Mouse3208 &harr; Mouse3210",
+              "Mouse3347 &harr; Mouse3348",
+              "Mouse3367 &harr; Mouse3369",
+              "Mouse3381 &harr; Mouse3382",
+              "Mouse3449 &harr; Mouse3451",
+              "Mouse3452 &harr; Mouse3454",
+              "Mouse3589 &harr; Mouse3590",
+              "Mouse3592 &harr; Mouse3594")
+ascii(temp, include.row=FALSE, include.col=FALSE, align="c", width=50)
+@
+
+There is one wrinkle here: Mouse3381 was not assayed for hypo
+expression, but really it was Mouse3382 that was not assayed;
+Mouse3381 was assayed but was labeled Mouse3382.
+
+<<hypo_expr_calls, echo=FALSE, results=hide>>=
+wh <- which(self$hypo < mx$hypo)
+for(i in wh)
+  calls[names(themx$hypo)[i],"hypo"] <- themx$hypo[i]
+@
+
+.Scatterplots
+
+Let's look at detailed scatterplots of the expression data for all of
+these sample swaps.
+
+First, Mouse3179 &harr; Mouse3188.  Recall that Mouse3188 was part of
+a rotated trio in adipose (Mouse3187 &rarr; Mouse3188 &rarr;
+Mouse3200 &rarr; Mouse3187).  These are not too pretty, but it is
+a clear swap Mouse3179 &harr; Mouse3188 in hypo.
+
+<<hypo_3179_3188, fig=TRUE, height=11.25, width=16, echo=FALSE, results=hide>>=
+mice1 <- c("Mouse3179", "Mouse3179", "Mouse3179", "Mouse3188", "Mouse3188")
+mice2 <- c("Mouse3179", "Mouse3187", "Mouse3188", "Mouse3179", "Mouse3188")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(5,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(k in seq(along=mice1)) {
+  m1 <- mice1[k]
+  m2 <- mice2[k]
+  for(i in tissue2) {
+    if(m2 %in% rownames(get(arr[i]))) {
+      grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+           cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+      rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+      text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+           col = corrcolor(rho))
+    }
+    else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+    title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+    title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+  }
+}
+@
+
+Mouse3208 &harr; Mouse3210: These are rather messy, but it is still a
+clear sample swap.
+
+<<hypo_3208_3210, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3208", "Mouse3210")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+
+
+Mouse3347 &harr; Mouse3348: Again, these are rather messy, but still a
+clear sample swap.
+
+<<hypo_3347_3348, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3347", "Mouse3348")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Mouse3367 &harr; Mouse3369
+
+<<hypo_3367_3369, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3367", "Mouse3369")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+Mouse3381 &harr; Mouse3382 (but note that Mouse3381 was not intended
+to be done in hypo).
+
+<<hypo_3381_3382, fig=TRUE, height=4.5, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3382", "Mouse3381")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(2,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice[1]) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+Mouse3449 &harr; Mouse3451
+
+<<hypo_3449_3451, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3449", "Mouse3451")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Mouse3452 &harr; Mouse3454
+
+<<hypo_3452_3454, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3452", "Mouse3454")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+
+Mouse3589 &harr; Mouse3590
+
+<<hypo_3589_3590, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3589", "Mouse3590")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Mouse3592 &harr; Mouse3594
+
+<<hypo_3592_3594, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3592", "Mouse3594")
+
+tissue1 <- "hypo"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+=== Islet ===
+
+There were \Sexpr{nrow(islet.mlratio)} individuals assayed for
+islet expression, after omitting \Sexpr{expr.tab["islet",2]} bad
+array.
+
+<<count_islet_expr_problems, echo=FALSE, results=hide>>=
+n.islet.problems <- sum(self$islet < mx$islet & mx$islet > 0.8)
+@
+
+Here is the plot of the self-self correlations versus the maximum correlation.
+Again, for most samples, the
+self-self correlation is the maximum; these samples appear to be
+aligned correctly.  The \Sexpr{n.islet.problems}
+samples with problems are highlighted in green, and we indicate the
+sample label and then what we infer to be the correct label.
+
+
+<<islet_expr_selfmax_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+grayplot(self$islet, mx$islet, xlab="Self-self correlation",
+     ylab="Self-max correlation", las=1, main="Islet expression",
+     xlim=c(self.min, 1), ylim=c(mx.min, 1),
+     vlines=seq(-0.2, 1, by=0.1), hlines=seq(0.5, 1, by=0.1))
+abline(0,1, col="white", lwd=2)
+wh1 <- which(self$islet < mx$islet & mx$islet > 0.8)
+wh2 <- which(self$islet < mx$islet & mx$islet < 0.8)
+points(self$islet[wh1], mx$islet[wh1], pch=21, bg="green")
+points(self$islet[wh2], mx$islet[wh2], pch=21, bg="orange")
+lab <- paste(names(self$islet)[wh1], "->", themx$islet[wh1])
+u <- par("usr")
+labadj <- 0.013*diff(u[1:2])
+labadj1 <- labadj*c(0,-1,1)
+hadj <- c(0.5, 1, 0)
+vadj <- c(-0.02*diff(u[3:4]), 0, 0)
+for(i in seq(along=wh1))
+  text(self$islet[wh1[i]] + labadj1[i], mx$islet[wh1[i]]+vadj[i], lab[i],
+     adj=c(hadj[i], 0.5), col="blue")
+text(self$islet[wh2] - labadj, mx$islet[wh2], names(self$islet)[wh2],
+     adj=c(1, 0.5), col="blue")
+@
+
+There is an additional potential problem highlighted in orange, having
+low self-self correlation, and being slightly more correlated to
+another sample than to itself, but this is Mouse3188 again, which was
+involved in sample mix-ups in both adipose and hypo.  We think it is
+correctly labeled in islet.
+
+The \Sexpr{n.islet.problems} problem samples are inferred to be a
+sample swap, Mouse3598 &harr; Mouse3599, plus a sample duplicate:
+Mouse3295 was run correctly but also with the label Mouse3296 (more on
+this xref:expr_dup[below]).
+
+<<islet_expr_calls, echo=FALSE, results=hide>>=
+wh <- which(self$islet < mx$islet & mx$islet > 0.8)
+for(i in wh)
+  calls[names(themx$islet)[i],"islet"] <- themx$islet[i]
+@
+
+.Scatterplots
+
+Let's look at detailed scatterplots of the expression data for the
+sample mixups.
+
+First, the sample swap, Mouse3598 &harr; Mouse3599.  You can see that, in all tissues,  Mouse3598 is
+not correlated with itself but is correlated with Mouse3599, and vice
+versa.
+
+<<islet_3598_v_3599, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3598", "Mouse3599")
+tissue1 <- "islet"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Now we turn to the apparent duplicate, the Mouse3296 sample really
+being Mouse3295.  Mouse3296 in islet is not correlated with itself but
+is correlated with Mouse3295.  Mouse3295 in islet looks fine: It's
+correlated with itself and not correlated Mouse3296 in the other
+tissues.  We'll revisit this xref:expr_dup[below in the section on Sample duplicates].
+
+<<islet_3295_v_3296, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3296", "Mouse3295")
+tissue1 <- "islet"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+=== Kidney ===
+
+There were \Sexpr{nrow(kidney.mlratio)} individuals assayed for
+kidney expression, after omitting \Sexpr{expr.tab["kidney",2]} bad
+array.  Note that there were \Sexpr{sum(is.na(self$kidney))} samples
+that were assayed for kidney expression but no other tissue.
+
+<<count_kidney_expr_problems, echo=FALSE, results=hide>>=
+n.kidney.problems <- sum(!is.na(self$kidney) & self$kidney < mx$kidney & mx$kidney > 0.81)
+@
+
+Here is the plot of the self-self correlations versus the maximum correlation.
+Again, for most samples, the
+self-self correlation is the maximum; these samples appear to be
+aligned correctly.  The \Sexpr{n.kidney.problems}
+samples with problems are highlighted in green, and we indicate the
+sample label and then what we infer to be the correct label.
+
+<<kidney_expr_selfmax_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+grayplot(self$kidney, mx$kidney, xlab="Self-self correlation",
+     ylab="Self-max correlation", las=1, main="Kidney expression",
+     xlim=c(self.min, 1), ylim=c(mx.min, 1),
+     vlines=seq(-0.2, 1, by=0.1), hlines=seq(0.5, 1, by=0.1))
+abline(0,1, col="white", lwd=2)
+wh1 <- which(!is.na(self$kidney) & self$kidney < mx$kidney & mx$kidney > 0.81)
+wh2 <- which(!is.na(self$kidney) & self$kidney < mx$kidney & mx$kidney < 0.81)
+points(self$kidney[wh1], mx$kidney[wh1], pch=21, bg="green")
+points(self$kidney[wh2], mx$kidney[wh2], pch=21, bg="orange")
+lab <- paste(names(self$kidney)[wh1], "->", themx$kidney[wh1])
+u <- par("usr")
+labadj <- 0.013*diff(u[1:2])
+text(self$kidney[wh1] - labadj, mx$kidney[wh1], lab,
+     adj=c(1, 0.5), col="blue")
+text(self$kidney[wh2] - labadj, mx$kidney[wh2], names(self$kidney)[wh2],
+     adj=c(1, 0.5), col="blue")
+@
+
+There is an additional potential problem highlighted in orange (Mouse3484),
+being a bit more correlated to
+another sample (Mouse3503) than to itself.  These two arrays are oddly
+behaved and will be investigated further xref:expr_dup[below].
+
+The \Sexpr{n.kidney.problems} problem samples are inferred to be a
+sample swap, Mouse3510 &harr; Mouse3523.
+
+<<kidney_expr_calls, echo=FALSE, results=hide>>=
+wh <- which(!is.na(self$kidney) & self$kidney < mx$kidney & mx$kidney > 0.81)
+for(i in wh)
+  calls[names(themx$kidney)[i],"kidney"] <- themx$kidney[i]
+@
+
+
+.Scatterplots
+
+Let's look at detailed scatterplots of the expression data for the
+sample mixups.
+
+First, the sample swap, Mouse3510 &harr; Mouse3523.  You can see that, in all tissues,  Mouse3510 is
+not correlated with itself but is correlated with Mouse3523, and vice
+versa.
+
+<<kidney_3510_v_3523, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3510", "Mouse3523")
+tissue1 <- "kidney"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Now we show scatterplots for the odd pair, Mouse3484 and 3503.  They
+all seem correlated with each other. We'll revisit this xref:expr_dup[below in the section on Sample duplicates].
+
+<<kidney_3484_v_3503, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3484", "Mouse3503")
+tissue1 <- "kidney"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i",
+             xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+
+
+=== Liver ===
+
+There were \Sexpr{nrow(liver.mlratio)} individuals assayed for
+liver expression, after omitting \Sexpr{expr.tab["liver",2]} bad
+array.
+
+<<count_liver_expr_problems, echo=FALSE, results=hide>>=
+n.liver.problems <- sum(self$liver < mx$liver)
+@
+
+Here is the plot of the self-self correlations versus the maximum correlation.
+The \Sexpr{n.liver.problems}
+samples with problems are highlighted in green, and we indicate the
+sample label and then what we infer to be the correct label.
+
+
+<<liver_expr_selfmax_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+grayplot(self$liver, mx$liver, xlab="Self-self correlation",
+     ylab="Self-max correlation", las=1, main="Liver expression",
+     xlim=c(self.min, 1), ylim=c(mx.min, 1),
+     hlines=seq(0.5, 1, by=0.1), vlines=seq(-0.2, 1, by=0.1))
+abline(0,1, col="white", lwd=2)
+wh1 <- which(self$liver < mx$liver & mx$liver > 0.8)
+wh2 <- which(self$liver < mx$liver & mx$liver < 0.8)
+points(self$liver[wh1], mx$liver[wh1], pch=21, bg="green")
+points(self$liver[wh2], mx$liver[wh2], pch=21, bg="orange")
+lab <- paste(names(self$liver)[wh1], "->", themx$liver[wh1])
+u <- par("usr")
+labadj <- 0.013*diff(u[1:2])
+text(self$liver[wh1] - labadj, mx$liver[wh1], lab,
+     adj=c(1, 0.5), col="blue")
+@
+
+The \Sexpr{n.liver.problems} problem samples are inferred to be a
+sample swap,
+Mouse3142 &harr; Mouse3143 (though Mouse3143 was not intended to be
+assayed for liver), and a sample duplicate: Mouse3136 was assayed
+correctly and also with the label Mouse3141 (more xref:expr_dup[below]).
+
+<<liver_expr_calls, echo=FALSE, results=hide>>=
+wh <- which(self$liver < mx$liver)
+for(i in wh)
+  calls[names(themx$liver)[i],"liver"] <- themx$liver[i]
+@
+
+.Scatterplots
+
+Let's look at detailed scatterplots of the expression data for the
+sample mixups.
+
+First, the sample swap, Mouse3142 &harr; Mouse3143, but with Mouse3143
+not intended to be assayed in liver.  You can see that, in all tissues,  Mouse3142 is
+not correlated with itself but is correlated with Mouse3143.
+
+<<liver_3142_v_3143, fig=TRUE, height=4.5, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3142", "Mouse3143")
+tissue1 <- "liver"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(2,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice[1]) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+Now we turn to the apparent duplicate, the Mouse3141 sample really
+being Mouse3136.  We'll revisit this xref:expr_dup[in the next section, on Sample duplicates].
+
+<<liver_3141_v_3136, fig=TRUE, height=9, width=16, echo=FALSE, results=hide>>=
+mice <- c("Mouse3141", "Mouse3136")
+tissue1 <- "liver"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissue2)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in tissue2) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+
+
+
+
+=== Sample duplicates [[expr_dup]] ===
+
+Above, we had identified several apparent sample duplicates (which
+might be called &ldquo;unintended technical replicates&rdquo;).  We now
+look at these in more detail.
+
+Consideration of all probes on an array will not be informative, as
+most genes are not expressed in a tissue and so the measurements are
+just noise.  To identify probes that with signal, we pull out those
+probes with correlation > 0.6 against at least one other tissue.
+
+<<expr_corr_within_tissues, echo=FALSE, results=hide>>=
+file <- "Rcache/expr_corr_within_tissues.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  dwithin <- vector("list", length(tissues))
+  names(dwithin) <- tissues
+  for(i in tissues) {
+    pairs <- (tissuepairs[,1] == i | tissuepairs[,2]==i)
+    probesub <- apply(expr.corr[,pairs], 1, min) > 0.6
+    dwithin[[i]] <- distee(get(arr[i])[,probesub], d.method="cor")
+  }
+  save(dwithin, file=file)
+}
+@
+
+For each tissue, there are non-duplicate pairs with correlations that
+reach 0.9, while each of islet, kidney and
+liver have a pair of samples with correlation > 0.98.
+
+Here are the top 5 between-tissue correlations for each tissue.
+
+<<top5_within_tissue_corr, echo=FALSE, results=ascii>>=
+top5 <- matrix(ncol=length(tissues), nrow=5)
+colnames(top5) <- tissues
+for(i in tissues)
+  top5[,i] <- sort(unclass(dwithin[[i]])[lower.tri(dwithin[[i]])], decreasing=TRUE)[1:5]
+ascii(top5, include.rownames=FALSE, include.colnames=TRUE, digits=2,
+      header=TRUE, align="c")
+@
+
+In islet, Mouse3296 is a duplicate of Mouse3295.
+
+<<islet_dup_3295_v_3296, fig=TRUE, height=9, width=19.2, echo=FALSE, results=hide>>=
+mice <- c("Mouse3296", "Mouse3295")
+tissue1 <- "islet"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissues)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in c(tissue1, tissue2)) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+In liver, Mouse3141 is a duplicate of Mouse3136.
+
+<<liver_dup_3141_v_3136, fig=TRUE, height=9, width=19.2, echo=FALSE, results=hide>>=
+mice <- c("Mouse3141", "Mouse3136")
+tissue1 <- "liver"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissues)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in c(tissue1, tissue2)) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i", xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+In kidney, Mouse3484 and Mouse3503 remain a bit of a conundrum, since
+they each are correlated with the other in all tissues.
+
+<<kidney_dup_3484_v_3503, fig=TRUE, height=9, width=19.2, echo=FALSE, results=hide>>=
+mice <- c("Mouse3484", "Mouse3503")
+tissue1 <- "kidney"
+tissue2 <- tissues[tissues != tissue1]
+pairs <- rep(NA, length(tissue2))
+names(pairs) <- tissue2
+for(i in tissue2)
+  pairs[i] <- which((tissuepairs[,1]==tissue1 & tissuepairs[,2]==i) |
+                    (tissuepairs[,2]==tissue1 & tissuepairs[,1]==i))
+probesub <- apply(expr.corr[,pairs], 1, function(a) all(a > 0.6))
+
+par(mfrow=c(4,length(tissues)), las=1, mar=c(5.1, 4.1, 0.6, 0.6))
+for(m1 in mice) {
+  for(m2 in mice) {
+    for(i in c(tissue1, tissue2)) {
+      if(m2 %in% rownames(get(arr[i]))) {
+        grayplot(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], xlim=c(-2, 2), ylim=c(-2,2),
+             cex=expr.corr[probesub,"ah"]*3-1.2, xaxs="i", yaxs="i",
+             xlab="", ylab="", vlines=-2:2, hlines=-2:2)
+        rho <- cor(get(arr[i])[m2,probesub], get(arr[tissue1])[m1,probesub], use="complete")
+        text(0, 1.5, paste("corr =", sprintf("%.2f", rho)),
+             col = corrcolor(rho))
+      }
+      else plot(0,0,type="n", xlab="", ylab="", xaxt="n", yaxt="n")
+      title(xlab=paste(m2, i, sep=" : "), mgp=c(2.5, 0.5, 0))
+      title(ylab=paste(m1, tissue1, sep="\n"), mgp=c(1.8, 0.5, 0))
+    }
+  }
+}
+@
+
+This feature is specific to the two kidney samples.  For example, consider the
+between-individual correlations for all 15 tissue pairs.  Here, we'll
+grab the subset of \Sexpr{sum(apply(expr.corr, 1, min)> 0.6)} probes
+with correlation > 0.6 for all tissue pairs.
+
+<<between_tissue_corr_3484_3503, echo=FALSE, results=hide>>=
+probesub <- apply(expr.corr, 1, min) > 0.6
+cor.3484.3503 <- matrix(ncol=15, nrow=4)
+dimnames(cor.3484.3503) <- list(c("3484:3484", "3484:3503","3503:3484","3503:3503"), tissuepairs$short)
+for(i in 1:nrow(tissuepairs)) {
+  t1 <- tissuepairs[i,1]
+  t2 <- tissuepairs[i,2]
+  cor.3484.3503[1,i] <- cor(get(arr[t1])["Mouse3484",probesub],
+                            get(arr[t2])["Mouse3484",probesub], use="complete")
+  cor.3484.3503[2,i] <- cor(get(arr[t1])["Mouse3484",probesub],
+                            get(arr[t2])["Mouse3503",probesub], use="complete")
+  cor.3484.3503[3,i] <- cor(get(arr[t1])["Mouse3503",probesub],
+                            get(arr[t2])["Mouse3484",probesub], use="complete")
+  cor.3484.3503[4,i] <- cor(get(arr[t1])["Mouse3503",probesub],
+                            get(arr[t2])["Mouse3503",probesub], use="complete")
+}
+@
+
+Here are plots of the 15 between-tissue correlations for these two
+mice.  The pairs involving kidney are in red.
+
+<<between_tissue_corr_3484_3503_fig, fig=TRUE, height=7, echo=FALSE, results=hide>>=
+yl <- c(min(cor.3484.3503), 1)
+par(mfrow=c(2,2), las=1)
+col <- ifelse(tissuepairs[,1]=="kidney" | tissuepairs[,2]=="kidney", "red", "blue")
+for(i in 1:nrow(cor.3484.3503)) {
+  grayplot(cor.3484.3503[i,], xlab="Tissue pair", xat=NA, ylim=yl,
+       ylab="Correlation", main=rownames(cor.3484.3503)[i], col=col,
+       lwd=2, hlines=seq(0.4, 1, by=0.1), vlines=(1:15)[col=="red"])
+  axis(side=1, at=1:15, rep("", 15))
+  u <- par("usr")
+  text(1:15, u[3]-diff(u[3:4])*0.08, tissuepairs$short, srt=90,
+       xpd=TRUE, col=col)
+}
+@
+
+I still don't know what to make of this.  It's interesting to note
+that the red points are at about the same height in all four figures,
+while the blue points are high for 3484:3484 and 3503:3503 but low for
+3484:3503 and 3503:3484.
+
+Why should this pair of kidney samples have such similar expression?
+I'm inclined to think that a mixture of the two RNAs were placed on
+both arrays.
+
+I will omit these two arrays from further analyses.
+
+<<omit_kidney_3484_3503, echo=FALSE, results=hide>>=
+calls[c("Mouse3484", "Mouse3503"), "kidney"] <- "omit"
+@
+
+<<fill_in_kept_arrays, echo=FALSE, results=hide>>=
+for(i in 1:6)
+  calls[calls[,i]=="", i] <- rownames(calls)[calls[,i]==""]
+@
+
+
+=== Summary ===
+
+Here's a summary of the arrays omitted and found do be in mislabeled,
+for each tissue.
+
+<<summary_expr, echo=FALSE, results=ascii>>=
+tab <- matrix(ncol=4, nrow=6)
+dimnames(tab) <- list(tissues, c("total", "omit", "okay", "error"))
+for(i in 1:6) {
+  tab[i,1] <- sum(calls[,i] != "ND")
+  tab[i,2] <- sum(calls[,i] == "omit")
+  tab[i,3] <- sum(calls[,i] ==  rownames(calls))
+  tab[i,4] <- sum(calls[,i] !=  "omit" & calls[,i] != "ND" & calls[,i] != rownames(calls))
+}
+ascii(tab, digits=0, align="c", include.rownames=TRUE,
+      include.colnames=TRUE, header=TRUE)
+@
+
+I now omit the relevant arrays, combine the duplicates in liver and
+islet (by simply taking the average of the mlratios for each probe)
+and then re-name the arrays as inferred.
+
+<<realign_expr_arrays, echo=FALSE, results=hide>>=
+file <- "Rcache/mlratios_revised.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  for(i in tissues) {
+    keep <- grep("^Mouse", calls[,i])
+    orig <- rownames(calls)[keep]
+    new <- calls[keep,i]
+
+    # combine duplicates
+    tab <- table(new)
+    if(any(tab > 1)) {
+      thedup <- names(tab)[tab > 1]
+      wh <- which(new==thedup)
+      dup <- names(wh)
+      if(dup[2]==thedup) { dup <- rev(dup); wh <- rev(wh) }
+      temp <- get(arr[i])
+      temp[dup[1],] <- colMeans(temp[dup,], na.rm=TRUE)
+
+      calls[dup[2],i] <- paste("dup", calls[dup[2],i], sep="")
+      assign(arr[i], temp)
+
+      keep <- grep("^Mouse", calls[,i])
+      orig <- rownames(calls)[keep]
+      new <- calls[keep,i]
+    }
+
+    # subset arrays and rename
+    temp <- get(arr[i])
+    temp <- temp[orig,]
+    rownames(temp) <- new
+    assign(arr[i], temp)
+  }
+
+  save(adipose.mlratio, gastroc.mlratio, hypo.mlratio, islet.mlratio,
+       kidney.mlratio, liver.mlratio, file=file)
+}
+@
+
+
+
+
+
+== Line up expression with genotypes ==
+
+We now turn to the alignment of the expression arrays with the
+genotype data.
+
+<<annot_autosome, echo=FALSE, results=hide>>=
+# annotations of probes; pull out those mapping to autosome
+load("../OrigData/annot.amit_rev.RData")
+annot <- annot[!is.na(match(annot$chr, 1:19)),]
+
+## There are 5 probes with position information from Amit that
+## previous data said were "control probes".  But we're leaving
+#  these in.
+#
+#  513291
+#  513727
+#  10002899544
+#  10002916047
+#  10004036905
+
+# pull out position information
+probeloc <- data.frame(chr=as.character(annot$chr),
+                     pos=(annot$pStart + annot$pEnd)/2/10^6,
+                     stringsAsFactors=FALSE)
+rownames(probeloc) <- annot$a_gene_id
+@
+
+We first pull out all probes that have an annotated
+genomic position to an autosome.  There are \Sexpr{nrow(probeloc)}
+such probes.
+
+We next identify the nearest marker or pseudomarker for each probe.  QTL
+genotype probabilities were calculated at the markers and at 0.25 cM
+steps along the genome.
+
+<<find_nearest_pseudomarkers, echo=FALSE, results=hide>>=
+file <- "Rcache/pmark.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  newmap <- newmap[1:19]
+  pmap <- pmap[1:19]
+  f2g <- f2g["-X",]
+  f2g <- replacemap(f2g, newmap)
+  f2g <- calc.genoprob(f2g, step=0.25, map.function="c-f", err=0.002, stepwidth="max")
+  f2g$pheno$ID <- f2g$pheno$MouseNum
+  pmark <- find.gene.pseudomarker(f2g, pmap, probeloc)
+
+  save(f2g, pmap, pmark, probeloc, file=file)
+}
+@
+
+We then calculate a local LOD score for each probe in each tissue, at
+the marker/pseudomarker closest to the probe.
+
+<<calc_locallod, echo=FALSE, results=hide>>=
+file <- "Rcache/locallod.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  locallod <- vector("list", length(tissues))
+  names(locallod) <- tissues
+  for(i in tissues) {
+    temp <- findCommonID(colnames(get(arr[i])), rownames(probeloc))
+    expr.temp <- get(arr[i])[,temp$first]
+    theids <- findCommonID(f2g$pheno$MouseNum, expr.temp)
+
+    locallod[[i]] <- calc.locallod(f2g[,theids$first],
+                                   expr.temp[theids$second,],
+                                   pmark, verbose=FALSE)
+  }
+  save(locallod, file=file)
+}
+@
+
+Here is a table of the numbers of probes in each tissue with local LOD
+> 100.
+
+<<n_locallod_gt_100, echo=FALSE, results=ascii>>=
+tab <- t(as.matrix(sapply(locallod, function(a) sum(a > 100))))
+ascii(tab, digits=0, align="c", header=TRUE, include.colnames=TRUE)
+@
+
+
+We grab the probes with local LOD score > 100, construct a
+k-nearest neighbor classifier, for classifying eQTL genotype from
+expression, for each eQTL, and finally calculate the proportion
+mismatches between predicted and observed eQTL genotypes.  (We use k=20
+and a minimum class probability of 0.8 to make a decision.)
+
+<<calc_dist_gve, echo=FALSE, results=hide>>=
+file <- "Rcache/dgve.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  dgve <- vector("list", length(tissues))
+  names(dgve) <- tissues
+  for(i in tissues)
+    dgve[[i]] <- disteg(f2g, get(arr[i])[,names(locallod[[i]])[locallod[[i]] > 100]],
+                        pmark, verbose=FALSE, k=40)
+  dgve$combined <- combinedist(dgve, method="mean")
+  save(dgve, file=file)
+}
+@
+
+<<gve_min_and_self, echo=FALSE, results=hide>>=
+file <- "Rcache/dgve_min_and_self.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  mn <- lapply(dgve, apply, 1, min, na.rm=TRUE)
+  sec <- lapply(dgve, apply, 1, function(a) sort(a, decreasing=FALSE)[2])
+  themn <- self <- mn
+  for(i in names(dgve)) {
+    m <- match(rownames(dgve[[i]]), colnames(dgve[[i]]))
+    self[[i]] <- rep(NA, length(mn[[i]]))
+    for(j in seq(along=m)) {
+      if(is.na(m[j])) self[[i]][j] <- NA
+      else self[[i]][j] <- dgve[[i]][j,m[j]]
+    }
+
+    themn[[i]] <- apply(dgve[[i]], 1, function(a) { wh <- which(!is.na(a) & a==min(a, na.rm=TRUE));
+                        if(length(wh) > 1) wh <- sample(wh, 1); wh })
+    themn[[i]] <- colnames(dgve[[i]])[themn[[i]]]
+    names(themn[[i]]) <- names(self[[i]]) <- names(mn[[i]])
+  }
+
+  save(mn, sec, self, themn, file=file)
+}
+@
+
+Our measure of distance between samples is the proportion of
+mismatches between the observed and predicted eQTL genotypes.
+Consider the distance matrix with DNA samples as rows and mRNA samples
+as columns.  It's particularly informative to make a scatterplot of
+the minimum
+value in a row against the self-self distance. These plots are analogous to the
+plots of maximum correlation vs. self-self correlation that we had
+considered in aligning the expression arrays.
+
+In the following, we display such a plot for each tissue considered
+separately, plus with the distances matrices combined (by simply
+taking the overall proportion of mismatches, across all tissues).
+
+<<dgve_figure, fig=TRUE, height=10, width=10, echo=FALSE, results=hide>>=
+yl <- range(unlist(mn), na.rm=TRUE)
+xl <- range(unlist(self), na.rm=TRUE)
+layout(rbind(rep(1:3,rep(3,3)), rep(4:6, rep(3,3)), rep(c(7,0), c(5, 4))),
+       height=c(1,1,1.5))
+cutoff <- 0.16
+col <- rep("blue", length(self[[7]]))
+col[!is.na(self[[7]]) & self[[7]] > mn[[7]] & mn[[7]] < cutoff] <- "green"
+col[!is.na(self[[7]]) & self[[7]] > mn[[7]] & mn[[7]] >= cutoff] <- "red"
+names(col) <- names(self[[7]])
+for(i in names(mn)) {
+  grayplot(self[[i]], mn[[i]], main=i, las=1,
+       xlab="Self-self mismatches", ylab="Minimum mismatches",
+       col=col[names(self[[i]])], xlim=xl, ylim=yl,
+       hlines=seq(0, 0.4, by=0.1), vlines=seq(0, 0.8, by=0.2))
+  abline(0,1, col="white", lwd=2)
+}
+@
+
+In each case, the majority of samples are correctly labeled; for
+these, with the results for all tissues combined, the self-self
+distance is the minimal distance (the points in blue).  There are
+\Sexpr{sum(!is.na(self[[7]]) & self[[7]] == mn[[7]])} such samples.
+
+<<gve_correct, echo=FALSE, results=hide>>=
+wh <- which(!is.na(self[[7]]) & self[[7]]==mn[[7]])
+correct <- names(wh)
+calls[correct,"DNA"] <- paste0(calls[correct,"DNA"], correct)
+@
+
+The green points correspond to samples that were incorrectly labeled,
+but that are fixable: the self-self distance is large, indicating a
+clear error, but the minimal distance is small; there is an mRNA
+sample to which the DNA sample appears to correpond.
+With the results combined across tissues, there are
+\Sexpr{sum(!is.na(self[[7]]) & self[[7]] > mn[[7]] & mn[[7]] < 0.16)}
+such samples.
+
+<<gve_fixable, echo=FALSE, results=hide>>=
+wh <- which(!is.na(self[[7]]) & self[[7]] > mn[[7]] & mn[[7]] < 0.16)
+wh <- themn[[7]][wh]
+fixable <- wh
+calls[names(fixable), "DNA"] <- paste0(calls[names(fixable),"DNA"], fixable)
+@
+
+The red points correspond to samples that were incorrectly labeled and
+not fixable: the self-self distance is large, indicating a clear error,
+and the minimal distance is also large; there is no mRNA sample to
+which the DNA sample appears to correspond.  With the results combined
+across tissues, there are
+\Sexpr{sum(!is.na(self[[7]]) & self[[7]] > mn[[7]] & mn[[7]] > 0.16)}
+such samples.
+
+<<gve_notfixable, echo=FALSE, results=hide>>=
+wh <- which(!is.na(self[[7]]) & self[[7]] > mn[[7]] & mn[[7]] > 0.16)
+notfixable <- names(wh)
+calls[notfixable, "DNA"] <- paste0(calls[notfixable,"DNA"], "not", notfixable)
+@
+
+There are an additional \Sexpr{sum(is.na(self[[7]]))} DNA samples for
+which expression assays were not intended to be done.  These are not
+represented in the above figure, as their self-self distances are
+missing.  However, we can calculate the minimum distance between these
+DNA samples and all mRNA samples.  There are
+\Sexpr{sum(is.na(self[[7]]) & mn[[7]] < 0.16)} such DNA samples that have
+< 10% mismatches with one of the mRNA sample; these likely are
+fixable sample mixups.  The other \Sexpr{sum(is.na(self[[7]]) & mn[[7]] > 0.16)}
+DNA samples have no mRNA sample that seems to correspond and so
+may be correct (though we cannot be certain).
+
+<<gve_maybe, echo=FALSE, results=hide>>=
+wh <- which(is.na(self[[7]]))
+temp <- mn[[7]][names(wh)]
+maybecorrect <- names(temp)[temp > 0.16]
+calls[maybecorrect, "DNA"] <- paste0(calls[maybecorrect, "DNA"], "maybe", maybecorrect)
+@
+
+<<gve_more_fixable, echo=FALSE, results=hide>>=
+morefixable <- names(temp)[temp < 0.16]
+morefixable <- themn[[7]][morefixable]
+calls[names(morefixable), "DNA"] <- paste0(calls[names(morefixable),"DNA"], morefixable)
+@
+
+=== Potential discrepancies ===
+
+Note that the points are colored based on the results for the six
+tissues combined.  For each tissue there are numerous green points
+(with the combined data, viewed as &ldquo;fixable&rdquo;) that have high minimum
+mismatches.  These are cases where the inferred sample was not run in
+that particular tissue but was run in others: For the most part, these
+are samples that were run only in kidney or run in other tissues but
+not kidney.  Hypo is a bit messy, though, with less-clear separation
+between &ldquo;fixable&rdquo; and &ldquo;not fixable&rdquo;.
+
+Here is a table of these discrepancies.  The numbers are the minimal percent
+mismatches between observed and inferred eQTL genotypes, by tissue and
+then with all tissues combined.  The &ldquo;Note&rdquo; column explains why some
+tissues show a discrepancy; most are due to missing expression data.
+
+<<table_of_green_points, echo=FALSE, results=ascii>>=
+fixable <- !is.na(self[["combined"]]) & self[["combined"]] > mn[["combined"]] &
+              mn[["combined"]] < 0.16
+fixable <- names(fixable)[fixable]
+
+fixable.mn <- matrix(ncol=7, nrow=length(fixable))
+dimnames(fixable.mn) <- list(fixable, names(dgve))
+for(i in seq(along=dgve))
+  fixable.mn[,i] <- apply(dgve[[i]][fixable,], 1, min, na.rm=TRUE)
+
+fixable.themn <- matrix("", ncol=7, nrow=length(fixable))
+dimnames(fixable.themn) <- list(fixable, names(dgve))
+for(i in seq(along=dgve))
+  fixable.themn[,i] <- themn[[i]][fixable]
+
+prob <- apply(fixable.mn, 1, function(a) any(a > 0.16))
+prob <- names(prob)[prob]
+
+tab <- round(fixable.mn[prob,]*100)
+tab <- as.data.frame(tab)
+tab$note <- rep("", nrow(tab))
+tab$inferred <- fixable.themn[rownames(tab),7]
+for(i in 1:nrow(tab)) {
+  tmp <- colSums(calls[,1:6] == tab$inferred[i])
+  if(sum(tmp > 0) == 1)
+    tab$note[i] <- paste("only", tissues[tmp > 0])
+  else if(sum(tmp == 0) == 1)
+    tab$note[i] <- paste("all but", tissues[tmp == 0])
+  else if(all(tmp > 0)) {
+    if(sum(fixable.mn[rownames(tab)[i],1:6] > 0.15) == 1) {
+      wh <- which(fixable.mn[rownames(tab)[i],1:6] > 0.15)
+      num <- sum(fixable.mn[rownames(tab)[i],1:6] > 0.09)
+      if(num > 2) tab$note[i] <- "many sloppy"
+      else tab$note[i] <- paste("sloppy", tissues[wh])
+    }
+  }
+  else if(sum(tmp == 0) == 2) {
+    wh <- which(tmp==0)
+    tab$note[i] <- paste("missing", paste(tissues[wh], collapse=" and "))
+  }
+}
+
+tab <- cbind(Sample=rownames(tab), Inferred=tab$inferred, Note=tab$note, tab[,1:7])
+tab$Sample <- sub("^Mouse", "", tab$Sample)
+tab$Inferred <- sub("^Mouse", "", tab$Inferred)
+ascii(tab[order(tab$Note),], include.rownames=FALSE, include.colnames=TRUE, header=TRUE,
+      align=c("c","c","l",rep("c", 7)), digits=0)
+@
+
+<<gve_discrepencies, echo=FALSE, results=hide>>=
+m3270 <- rbind(prop.mismatch=sapply(dgve, function(a) a["Mouse3270", "Mouse3270"]),
+               total=sapply(dgve, function(a) attr(a, "denom")["Mouse3270", "Mouse3270"]))
+m3270 <- rbind(m3270, "n.mismatch" = m3270[1,]*m3270[2,])
+m3142 <- rbind(prop.mismatch=sapply(dgve[-6], function(a) a["Mouse3142", "Mouse3142"]),
+               total=sapply(dgve[-6], function(a) attr(a, "denom")["Mouse3142", "Mouse3142"]))
+m3142 <- rbind(m3142, "n.mismatch" = m3142[1,]*m3142[2,])
+@
+
+
+
+
+There are two additional samples that deserve to be highlighted, which are two
+blue points (inferred to be correctly labeled) that are off the
+diagonal line in one tissue:
+
+* Mouse3270 shows \Sexpr{round(m3270["prop.mismatch", "liver"]*100)}%
+  mismatches
+  (\Sexpr{round(m3270["n.mismatch", "liver"])}/\Sexpr{round(m3270["total","liver"])})
+  in liver,
+  and \Sexpr{round(m3270["prop.mismatch", "combined"]*100)}%
+  mismatches
+  (\Sexpr{round(m3270["n.mismatch", "combined"])}/\Sexpr{round(m3270["total","combined"])})
+  overall.
+
+* Mouse3142 shows \Sexpr{round(m3142["prop.mismatch", "hypo"]*100)}%
+  mismatches
+  (\Sexpr{round(m3142["n.mismatch", "hypo"])}/\Sexpr{round(m3142["total","hypo"])})
+  in hypo,
+  and \Sexpr{round(m3142["prop.mismatch", "combined"]*100)}%
+  mismatches
+  (\Sexpr{round(m3142["n.mismatch", "combined"])}/\Sexpr{round(m3142["total","combined"])})
+  overall.
+
+In both of these cases, I'm inclined to conclude that the expression
+array data may be of low quality, but the samples are correctly labeled.
+
+=== Fix up sample duplicates ===
+
+The re-alignment of the DNA samples requires that we go back to the
+inferred sample duplicates and relabel some of them.  In particular,
+the sample for Mouse3269 was found to be a duplicate of the sample for
+Mouse3259, but the sample for Mouse3259 was actually for Mouse3332,
+and so both are really Mouse3332.  Similarly, the sample for
+Mouse3354 was a duplicate of the sample for Mouse3353, but the sample
+for Mouse3353 was actually Mouse3352, and so both are really Mouse3352.
+
+<<fix_duplicates, echo=FALSE, results=hide>>=
+dup <- grep("dupMouse", calls[,"DNA"])
+other <- sub("dup", "", calls[dup,"DNA"])
+actual <- calls[other, "DNA"]
+calls[dup,"DNA"] <- paste0("dup", actual)
+@
+
+<<save_calls, echo=FALSE, results=hide>>=
+# save calls to a file
+save(calls, file="calls.RData")
+@
+
+=== Summary ===
+
+Here's a summary of the problems observed in the genotype data.
+
+<<genotype_error_tab, echo=FALSE, results=ascii>>=
+ok <- sum(calls[,"DNA"] == rownames(calls))
+omit <- length(grep("omit", calls[,"DNA"]))
+dup <- length(grep("^dupMouse", calls[,"DNA"]))
+maybe <- length(grep("^maybeMouse", calls[,"DNA"]))
+error <- sum(calls[,"DNA"] != rownames(calls)) - omit - dup - maybe
+tab <- rbind("okay"=ok,
+             "omitted"=omit,
+             "duplicate"=dup,
+             "maybe okay"=maybe,
+             "error"=error,
+             "total"=nrow(calls))
+ascii(tab, header=FALSE, include.rownames=TRUE, width=25,
+      include.colnames=FALSE, digits=0, align=c("c","r"))
+@
+
+
+
+
+== X chromosome and sex ==
+
+=== Genotypes ===
+
+I originally came to these observations by identifying a set of
+samples for which sex did not match the X chromosome genotype.  It
+would be good to revisit that issue: with the genotypes realigned, do
+the sexes now match what was observed in the X chromosome data?
+
+We first grab the set of DNAs for which we are now sure of the
+appropriate labels.  (There are
+\Sexpr{length(grep("^Mouse", calls[,"DNA"]))}
+such.)
+
+We want to compare the inferred sex from the X chromosome genotypes
+for the samples to the documented sex (attached to the correct label).
+
+<<two_sexes, echo=FALSE, results=hide>>=
+# f2g with X chr
+load("Rcache/f2g.RData")
+# need to go back to original data to capture sexes of a couple of mice
+necropsy <- read.csv("../FinalData/necropsy.csv", as.is=TRUE)
+necropsy$Sex <- sub("F", "Female", sub("M", "Male",necropsy$Sex))
+
+wh <- grep("^Mouse", calls[,"DNA"])
+omouse <- rownames(calls)[wh] # label attached to DNA sample
+cmouse <- calls[wh,"DNA"]     # mouse to which it really corresponds
+
+osexG <- f2g$pheno$Sex[match(omouse, f2g$pheno$MouseNum)] # sex inferred from genotypes
+osexPh <- necropsy$Sex[match(omouse, necropsy$MouseNum)] # correct sex
+csex <- necropsy$Sex[match(cmouse, necropsy$MouseNum)]
+
+problem <- (csex != osexG)
+g <- pull.geno(f2g, chr="X")[match(omouse[problem], f2g$pheno$MouseNum),]
+@
+
+Of the \Sexpr{length(cmouse)} DNA samples that are correct or can be corrected,
+\Sexpr{sum(osexG != osexPh)} showed a mismatch between sex and X chromosome
+genotypes.  With the corrected sample labels, there are
+\Sexpr{sum(csex != osexG)} discrepancies:
+
+<<two_sexes_table, echo=FALSE, results=ascii>>=
+tab <- data.frame(OrigMouseNum = omouse[problem],
+                  CorrectedMouseNum = cmouse[problem],
+                  SexFromGenotypes = osexG[problem],
+                  CorrectSex = csex[problem])
+ascii(tab, header=TRUE, align="c", include.rownames=FALSE,
+      colnames=c("Original ID", "Corrected ID", "Sex from genotypes",
+      "Sex from necropsy"), width=70)
+@
+
+But all three of these mice are homozygous (or hemizygous) BTBR across
+the entire X chromosome, and so the X chromosome genotypes are
+compatible with either sex.  Thus, there are no real discrepancies
+between the X chromosome genotypes and the sex of the mice, once the
+labels for the DNA samples have been corrected.
+
+<<Xgenotypes, echo=FALSE, results=ascii>>=
+m <- match(omouse[problem], f2g$pheno$MouseNum)
+tab <- t(apply(qtl:::reviseXdata("f2", "full", sexpgm=getsex(f2g[,m]),
+               geno=f2g[,m]$geno[["X"]]$data), 1, function(a) table(factor(a, levels=1:4))))
+colnames(tab) <- qtl:::getgenonames("f2", "X", "full", getsex(f2g), attributes(f2g))
+rownames(tab) <- omouse[problem]
+ascii(tab, header=TRUE, include.rownames=TRUE, include.colnames=TRUE,
+      digits=0, align="c", width=50)
+@
+
+=== Gene expression ===
+
+We can also look at the expression of the Xist gene (which should be
+high in females and 0 in males) and of Y chromosome genes (which
+should be >0 in males and 0 in females).
+
+<<xist_and_y_genes, results=hide, echo=FALSE>>=
+load("../OrigData/annot.amit_rev.RData")
+xist.probe <- annot$a_gene_id[!is.na(annot$officialgenesymbol) & annot$officialgenesymbol=="Xist"]
+ychr.probes <- annot$a_gene_id[annot$chr=="Y"]
+goodyprobes <- c("10002897002", "512831", "10002915709")
+sex <- necropsy$Sex
+sexnum <- match(sex, c("Female", "Male"))
+names(sexnum) <- names(sex) <- necropsy$MouseNum
+@
+
+In the following, I plot the average expression of \Sexpr{length(goodyprobes)} Y chromosome
+genes against the expression of Xist, with points colored by the sex
+of the sample (blue is male; red is female).  (The expression arrays
+contained \Sexpr{length(ychr.probes)} probes for genes on the Y
+chromosome, but only a portion of them showed clear sex differences in
+expression in all tissues, and so I focused on these.)
+
+<<XandYexprfig, fig=TRUE, height=10, echo=FALSE, results=hide>>=
+par(mfrow=c(3, 2), las=1)
+for(i in tissues)
+  grayplot(get(arr[i])[,xist.probe], rowMeans(get(arr[i])[,goodyprobes], na.rm=TRUE),
+       col=c("red", "blue")[sexnum[rownames(get(arr[i]))]], main=i,
+       xlab="Xist expression", ylab="Y chr expression",
+       hlines=seq(-2, 2, by=0.5), vlines=seq(-2, 2, by=0.5))
+@
+
+Hypo is a bit of a mess, with a bunch of females having unusually low
+Xist expression and a bunch of males having unusually low Y chromosome
+expression; this is almost entirely explained by a bad batch of arrays
+that we ultimately removed.
+
+The other five tissues look great.  There is one case
+of a male with relatively high Xist expression in adipose, but the sex
+assignments of the expression arrays, after the fixing labels,
+appears to be correct.
+
+The following is the plot for hypo, without the bad batch of arrays:
+
+<<hypo_XandYexprfig, fig=TRUE, height=7, echo=FALSE, results=hide>>=
+par(las=1, mar=c(5.1,4.1,1.1,1.1))
+rowMedian <- apply(hypo.mlratio, 1, median, na.rm=TRUE)
+grayplot(hypo.mlratio[rowMedian <= 0.016,xist.probe],
+         rowMeans(hypo.mlratio[rowMedian <= 0.016, goodyprobes], na.rm=TRUE),
+       col=c("red", "blue")[sexnum[rownames(hypo.mlratio)[rowMedian <=
+       0.016]]], main="",
+       xlab="Xist expression", ylab="Y chr expression",
+       hlines=seq(-2, 2, by=0.5), vlines=seq(-2, 2, by=0.5))
+@
+
+
+== QTL mapping results, before and after ==
+
+I now will compare the QTL mapping results, before and after the
+correction of the sample mixups.  I will look at insulin (a
+particularly important trait), agouti coat color and tufted coat (both
+simple Mendelian phenotypes), and eQTL for all tissues.
+
+I first need to re-align the genotype data.  I will drop all samples
+whose labels are not clear (that includes any DNA without
+associated expression data).
+
+<<rearrange_genotypes, echo=FALSE, results=hide>>=
+file <- "Rcache/f2gc.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  load("Rcache/f2g.RData")
+  tokeep <- rownames(calls)[grep("^Mouse", calls[,"DNA"])]
+  f2gc <- f2g[,match(tokeep, f2g$pheno$MouseNum)]
+  f2gc$pheno$MouseNum <- factor(calls[tokeep, "DNA"])
+
+  # deal with Sex
+  necropsy <- read.csv("../FinalData/necropsy.csv", as.is=TRUE)
+  necropsy$Sex <- sub("F", "Female", sub("M", "Male",necropsy$Sex))
+  SexNew <- necropsy$Sex[match(f2gc$pheno$MouseNum, necropsy$MouseNum)]
+
+  # fix X chr genotypes
+  wh <- (f2gc$pheno$Sex != SexNew)
+  f2gc$geno$X$data[wh,] <- 3 - f2gc$geno$X$data[wh,]
+
+  f2gc$pheno$Sex <- factor(SexNew, c("Female", "Male"))
+  save(f2gc, file=file)
+}
+@
+
+One problem with the data in the original form are the
+\Sexpr{sum(f2g$pheno$Sex != necropsy$Sex[match(f2g$pheno$MouseNum, necropsy$MouseNum)])}
+mice whose X chromosome genotypes don't match their sex.  For these, I will use the correct
+sex and omit the X chromosome genotype data.
+
+<<correct_sex_in_f2g, echo=FALSE, results=hide>>=
+file <- "Rcache/f2g_sexcorrection.RData"
+if(file.exists(file)) {
+ load(file)
+} else {
+  load("Rcache/f2g.RData")
+  necropsy <- read.csv("../FinalData/necropsy.csv", as.is=TRUE)
+  necropsy$Sex <- sub("F", "Female", sub("M", "Male",necropsy$Sex))
+  SexNew <- necropsy$Sex[match(f2g$pheno$MouseNum, necropsy$MouseNum)]
+  f2g$geno$X$data[f2g$pheno$Sex != SexNew,] <- NA
+  f2g$pheno$Sex <- factor(SexNew, c("Female", "Male"))
+  save(f2g, file=file)
+}
+
+<<calc_genoprob, echo=FALSE, results=hide>>=
+f2g <- replace.map(f2g, newmap)
+f2gc <- replace.map(f2gc, newmap)
+f2g <- calc.genoprob(f2g, step=0.5, stepwidth="max", err=0.002, map="c-f")
+f2gc <- calc.genoprob(f2gc, step=0.5, stepwidth="max", err=0.002, map="c-f")
+@
+
+=== Insulin ===
+
+First, I'll look at insulin levels at 10 weeks; we actually have three
+different measures of insulin at 10 weeks, and we also have insulin at
+4, 6 and 8 weeks, but I'll just look at one of the 10 week measures.
+I'll use the log scale and will include sex as an interactive
+covariate (that is, allowing QTL to have different effect in the two
+sexes).
+
+<<scan_insulin, echo=FALSE, results=hide>>=
+file <- "Rcache/insulin_scan.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  load("../FinalData/lipomics_final_rev2.RData")
+  id <- findCommonID(f2g$pheno$MouseNum, lipomics$MouseNum)
+  out.ins.o <- scanone(f2g[,id$first], phe=log(lipomics$"INSULIN (ng/ml) 10 wk"[id$second]),
+                       addcovar = as.numeric(f2g$pheno$Sex[id$first]),
+                       intcovar = as.numeric(f2g$pheno$Sex[id$first]))
+  nind.ins.o <- length(id$first)
+
+  id <- findCommonID(f2gc$pheno$MouseNum, lipomics$MouseNum)
+  out.ins.n <- scanone(f2gc[,id$first], phe=log(lipomics$"INSULIN (ng/ml) 10 wk"[id$second]),
+                       addcovar = as.numeric(f2gc$pheno$Sex[id$first]),
+                       intcovar = as.numeric(f2gc$pheno$Sex[id$first]))
+  nind.ins.n <- length(id$first)
+
+  save(out.ins.o, nind.ins.o, out.ins.n, nind.ins.n, file=file)
+}
+@
+
+In the original data, there were \Sexpr{nind.ins.o} mice; in the
+corrected data, we are left with \Sexpr{nind.ins.n} mice.  The
+following are the LOD curves, with those for the original data in red
+and those for the corrected data in blue.
+
+<<insulin_lod_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+plot(out.ins.o, out.ins.n, bandcol="gray80", col=c("red", "blue"))
+legend("topright", lwd=2, col=c("blue", "red"), c("Corrected",
+       "Original"), bg="white")
+@
+
+With the original data, there were
+\Sexpr{sum(tapply(out.ins.o[,3], out.ins.o[,1], max) >= 5)}
+chromosomes having a LOD score &ge; 5; with the corrected data, there
+are
+\Sexpr{sum(tapply(out.ins.n[,3], out.ins.n[,1], max) >= 5)}
+chromosomes with LOD &ge; 5.
+
+Here is a summary table of the peak LOD on chromosomes with inferred
+QTL.
+
+<<insulin_qtl_table, echo=FALSE, results=ascii>>=
+ins.summary <- summary(cbind(out.ins.o, out.ins.n,
+                       labels=c("old","new")), format="allpeaks", thr=5)
+ins.summary <- cbind(ins.summary[,c(1,3,2,5,4)], "change"=ins.summary[,5]-ins.summary[,3])
+ascii(ins.summary[,c(1,2,4,3,5,6)], digits=c(0, 2, 2, 1, 1, 2), align="c", include.rownames=FALSE,
+      include.colnames=TRUE, header=TRUE,
+      colnames=c("Chr", "LOD (old)", "LOD (new)",
+                 "Pos'n (old)", "Pos'n (new)", "Increase in LOD"))
+@
+
+The LOD
+scores on chromosomes 2, 5, 6, 7, and 9 went up substantially.
+The peak locations are largely unchanged.
+
+=== Agouti coat ===
+
+For most mice, it was recorded whether they had an
+http://www.informatics.jax.org/marker/MGI:87853[agouti coat] or not.
+This is due to a single gene (*a*, non-agouti) on chromosome 2 at
+154.6-154.8 Mbp.
+
+<<scan_agouti, echo=FALSE, results=hide>>=
+file <- "Rcache/agouti_scan.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  load("../FinalData/lipomics_final_rev2.RData")
+  id <- findCommonID(f2g$pheno$MouseNum, lipomics$MouseNum)
+  agouti.o <- match(lipomics$AGOUTI[id$second], c("T","B"))-1
+  out.agouti.o <- scanone(f2g[,id$first], phe=agouti.o, model="binary")
+  nind.agouti.o <- sum(!is.na(agouti.o))
+
+  id <- findCommonID(f2gc$pheno$MouseNum, lipomics$MouseNum)
+  agouti.n <- match(lipomics$AGOUTI[id$second], c("T","B"))-1
+  out.agouti.n <- scanone(f2gc[,id$first], phe=agouti.n, model="binary")
+  nind.agouti.n <- sum(!is.na(agouti.n))
+
+  save(agouti.o, agouti.n, out.agouti.o, nind.agouti.o, out.agouti.n, nind.agouti.n, file=file)
+}
+@
+
+In both the original and corrected data, agouti coat color maps
+strongly to chromosome 2. The LOD score increased from
+\Sexpr{round(max(out.agouti.o[,3]))} to
+\Sexpr{round(max(out.agouti.n[,3]))} with the correction
+of the sample mixups.  In both cases, the peak is at
+\Sexpr{sprintf("%.1f", unlist(interpPositions(max(out.agouti.n)[-3], newmap, pmap)[3]))}
+Mbp, right next to the true gene.
+
+<<agouti_lod_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+plot(out.agouti.o, out.agouti.n, bandcol="gray80", col=c("red", "blue"))
+legend("topright", lwd=2, col=c("blue", "red"), c("Corrected",
+       "Original"), bg="white")
+@
+
+If we grab the mice with good genotype data at the agouti locus, we
+obtain the following relationship between agouti genotype and phenotype
+for the original data (with alleles B = B6 and R = BTBR):
+
+<<genotype_vs_agouti, echo=FALSE, results=hide>>=
+file <- "Rcache/agouti_tab.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  pmar <- unlist(strsplit(rownames(max(out.agouti.n)), "\\."))[2]
+  g <- apply(f2g$geno[[2]]$prob[,pmar,], 1, function(a) if(max(a) > 0.99) return(which(a==max(a))) else return(NA))
+  g <- factor(g, levels=1:3)
+  gc <- apply(f2gc$geno[[2]]$prob[,pmar,], 1, function(a) if(max(a) > 0.99) return(which(a==max(a))) else return(NA))
+  gc <- factor(gc, levels=1:3)
+  levels(gc) <- levels(g) <- c("BB", "BR", "RR")
+  tab.o <- table(g, agouti.o)
+  tab.n <- table(gc, agouti.n)
+  colnames(tab.o) <- colnames(tab.n) <- c("Tan","Black")
+  names(dimnames(tab.o)) <- names(dimnames(tab.n)) <- c("Chr 2 genotype", "Agouti")
+
+  agouti.mismatch <- as.character(f2gc$pheno$MouseNum)[!is.na(agouti.n) & !is.na(gc) &
+                                         ((gc == "BB" & agouti.n==0) | (gc != "BB" & agouti.n==1))]
+
+  agouti.phe <- agouti.n
+  agouti.gen <- gc
+  names(agouti.phe) <- names(agouti.gen) <- as.character(f2gc$pheno$MouseNum)
+
+  save(tab.n, tab.o, agouti.mismatch, agouti.gen, agouti.phe, file=file)
+}
+@
+
+
+
+<<original_agouti_tab, echo=FALSE, results=ascii>>=
+ascii(tab.o, digits=0, include.rownames=TRUE, include.colnames=TRUE, header=TRUE,
+      align="c", width=50)
+@
+
+With the corrected data, we get the following table.
+
+<<corrected_agouti_tab, echo=FALSE, results=ascii>>=
+ascii(tab.n, digits=0, include.rownames=TRUE, include.colnames=TRUE, header=TRUE,
+      align="c", width=50)
+@
+
+With the original data, there are
+\Sexpr{sum(tab.o[1,1]+tab.o[2,2]+tab.o[3,2])} mismatches out of
+\Sexpr{sum(tab.o)} mice.  With the corrected data, there are
+\Sexpr{sum(tab.n[1,1]+tab.n[2,2]+tab.n[3,2])} mismatches out of
+\Sexpr{sum(tab.n)} mice.
+
+So there are still \Sexpr{sum(tab.n[1,1]+tab.n[2,2]+tab.n[3,2])} mismatches remaining,
+but the results are considerably improved.
+
+Here are the actual mice with mismatching agouti genotype/phenotype:
+
+<<agouti_mismatch_table, echo=FALSE, results=ascii>>=
+tab <- cbind(pheno=c("Tan", "Black")[agouti.phe[agouti.mismatch]+1],
+             geno=c("BB","BR","RR")[agouti.gen[agouti.mismatch]])
+rownames(tab) <- agouti.mismatch
+ascii(tab, include.rownames=TRUE, include.colnames=TRUE, header=TRUE,
+      align="c", digits=0, width=45)
+@
+
+The genotypes for the mismatching individuals seem clear and are not
+likely genotyping errors.  Here are the genotypes on chromosome 2 for
+these seven mice, with the agouti locus indicated by a green vertical
+line.  The top five have tan coats and should be BR (gray points) or
+RR (black points) at the agouti locus, but are all BB (white
+points). The bottom two have black coats and should be BB (white
+points) at the agouti locus but are BR (gray points).
+
+<<agouti_mismatch_geno, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+tmp <- f2gc["2", match(agouti.mismatch[order(agouti.phe[agouti.mismatch])], f2gc$pheno$MouseNum)]
+tmp <- calc.errorlod(tmp, err=0.002, map.function="c-f")
+tmp <- replace.map(tmp, pmap[2])
+tmp$pheno$id <- tmp$pheno$MouseNum
+source("my_plot_geno.R")
+par(mar=c(5.1,6.1,3.1,1.1))
+myPlotGeno(tmp, min.sep=-1)
+abline(v=(154.791402 + 155.051012)/2, col="green", lwd=2)
+@
+
+
+=== Tufted coat ===
+
+For most mice, we also have information on whether they had a
+http://www.informatics.jax.org/marker/MGI:98711[tufted coat] or not.
+This is due to a single gene on chromosome 17, though it seems that
+the actual gene is not yet known.
+
+<<scan_tufted, echo=FALSE, results=hide>>=
+file <- "Rcache/tufted_scan.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  load("../FinalData/lipomics_final_rev2.RData")
+  id <- findCommonID(f2g$pheno$MouseNum, lipomics$MouseNum)
+  tufted.o <- match(lipomics$TUFT[id$second], c("N","Y"))-1
+  out.tufted.o <- scanone(f2g[,id$first], phe=tufted.o, model="binary")
+  nind.tufted.o <- sum(!is.na(tufted.o))
+
+  id <- findCommonID(f2gc$pheno$MouseNum, lipomics$MouseNum)
+  tufted.n <- match(lipomics$TUFT[id$second], c("N","Y"))-1
+  out.tufted.n <- scanone(f2gc[,id$first], phe=tufted.n, model="binary")
+  nind.tufted.n <- sum(!is.na(tufted.n))
+
+  save(tufted.o, tufted.n, out.tufted.o, nind.tufted.o, out.tufted.n, nind.tufted.n, file=file)
+}
+@
+
+In both the original and corrected data, tufted coat maps
+strongly to chromosome 17, though the LOD score increased from
+\Sexpr{round(max(out.tufted.o[,3]))} to
+\Sexpr{round(max(out.tufted.n[,3]))} with the correction
+of the sample mixups.  In both cases, the peak is at
+marker \Sexpr{rownames(max(out.tufted.n))}, at
+\Sexpr{sprintf("%.1f", unlist(interpPositions(max(out.tufted.n)[-3], newmap, pmap)[3]))}
+Mbp.
+
+<<tufted_lod_fig, fig=TRUE, height=6, echo=FALSE, results=hide>>=
+plot(out.tufted.o, out.tufted.n, bandcol="gray80", col=c("red", "blue"))
+legend("topleft", lwd=2, col=c("blue", "red"), c("Corrected",
+       "Original"), bg="white")
+@
+
+If we grab the mice with good genotype data at the tufted locus, we
+obtain the following relationship between tufted genotype and phenotype
+for the original data (with alleles B = B6 and R = BTBR):
+
+<<genotype_vs_tufted, echo=FALSE, results=hide>>=
+file <- "Rcache/tufted_tab.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  pmar <- rownames(max(out.tufted.n))
+  g <- apply(f2g$geno[[17]]$prob[,pmar,], 1, function(a) if(max(a) > 0.99) return(which(a==max(a))) else return(NA))
+  g <- factor(g, levels=1:3)
+  gc <- apply(f2gc$geno[[17]]$prob[,pmar,], 1, function(a) if(max(a) > 0.99) return(which(a==max(a))) else return(NA))
+  gc <- factor(gc, levels=1:3)
+  levels(gc) <- levels(g) <- c("BB", "BR", "RR")
+  tab.o <- table(g, tufted.o)
+  tab.n <- table(gc, tufted.n)
+  colnames(tab.o) <- colnames(tab.n) <- c("No","Yes")
+  names(dimnames(tab.o)) <- names(dimnames(tab.n)) <- c("Chr 17 genotype", "Tufted coat")
+
+  tufted.mismatch <- as.character(f2gc$pheno$MouseNum)[!is.na(tufted.n) & !is.na(gc) &
+                                         ((gc != "RR" & tufted.n==1) | (gc == "RR" & tufted.n==0))]
+
+  tufted.phe <- tufted.n
+  tufted.gen <- gc
+  names(tufted.phe) <- names(tufted.gen) <- as.character(f2gc$pheno$MouseNum)
+
+  save(tab.n, tab.o, tufted.mismatch, tufted.phe, tufted.gen, file=file)
+}
+@
+
+<<original_tufted_tab, echo=FALSE, results=ascii>>=
+ascii(tab.o, digits=0, include.rownames=TRUE, include.colnames=TRUE, header=TRUE,
+      align="c", width=50)
+@
+
+With the corrected data, we get the following table.
+
+<<corrected_tufted_tab, echo=FALSE, results=ascii>>=
+ascii(tab.n, digits=0, include.rownames=TRUE, include.colnames=TRUE, header=TRUE,
+      align="c", width=50)
+@
+
+With the original data, there are
+\Sexpr{sum(tab.o[1,2]+tab.o[2,2]+tab.o[3,1])} mismatches out of
+\Sexpr{sum(tab.o)} mice.  With the corrected data, there are
+\Sexpr{sum(tab.n[1,2]+tab.n[2,2]+tab.n[3,1])} mismatches out of
+\Sexpr{sum(tab.n)} mice.
+
+So there are still \Sexpr{sum(tab.n[1,2]+tab.n[2,2]+tab.n[3,1])}
+mismatches remaining, but, as with agouti coat, the results are
+considerably improved after the correction for the sample mixups.
+
+Here are the actual mice with mismatching tufted genotype/phenotype:
+
+<<tufted_mismatch_table, echo=FALSE, results=ascii>>=
+tab <- cbind(pheno=c("Not tufted", "Tufted")[tufted.phe[tufted.mismatch]+1],
+             geno=c("BB","BR","RR")[tufted.gen[tufted.mismatch]])
+rownames(tab) <- tufted.mismatch
+ascii(tab, include.rownames=TRUE, include.colnames=TRUE, header=TRUE,
+      align="c", digits=0, width=45)
+@
+
+The genotypes for the mismatching individuals seem clear and are not
+likely genotyping errors.  Here are the genotypes on chromosome 17 for
+these four mice, with the tufted locus indicated by a green vertical
+line.  These all have non-tufted coats and should be BB (white gray) or BR
+(gray points) but are all RR (black points) at the tufted locus.
+
+<<tufted_mismatch_geno, fig=TRUE, height=4.5, echo=FALSE, results=hide>>=
+tmp <- f2gc["17", match(tufted.mismatch, f2gc$pheno$MouseNum)]
+tmp <- calc.errorlod(tmp, err=0.002, map.function="c-f")
+tmp <- replace.map(tmp, pmap[17])
+tmp$pheno$id <- tmp$pheno$MouseNum
+source("my_plot_geno.R")
+par(mar=c(5.1,6.1,3.1,1.1))
+myPlotGeno(tmp, min.sep=-1)
+abline(v=max(replacemap(out.tufted.n, pmap))[2], col="green", lwd=2)
+@
+
+
+=== eQTL analysis ===
+
+<<probes_to_keep, echo=FALSE, results=hide>>=
+load("../OrigData/annot.amit_rev.RData")
+tmp <- annot[!is.na(match(annot$chr, c(1:19, "X"))),]
+probes2keep <- tmp$a_gene_id
+chr <- as.character(tmp$chr)
+pos <- (tmp$pStart + tmp$pEnd)/2/10^6
+tmp <- data.frame(chr=chr, pos=pos, stringsAsFactors=FALSE)
+rownames(tmp) <- probes2keep
+probepos <- interpPositions(tmp, pmap, newmap)
+@
+
+Finally, we will map the expression of genes in all six tissues, with
+both the original data and the corrected data.  We will focus on
+probes for which we were able to infer a genomic location, and on an
+autosome or the X chromosome (i.e., not the Y or mitochondria).
+There are \Sexpr{length(probes2keep)} such probes.
+
+For all probes, we transform the expression measures to normal
+quantiles, and we include sex as an interactive covariate in the QTL
+analyses.
+
+<<count_qtl, echo=FALSE, results=hide>>=
+# function to count the number of trans and cis eQTL per transcript
+# QTL within "distance" of probe are considered cis eQTL; others trans
+# if distance=NA, we use the 1.5-LOD support interval
+count.qtl <-
+function(scanone_result, theprobepos=probepos, threshold=5, distance=2.5, drop=2)
+{
+  mx <- apply(scanone_result[,-(1:2)], 2, tapply, scanone_result[,1], max)
+  neqtl <- colSums(mx >= threshold)
+
+  theprobepos <- theprobepos[names(scanone_result)[-(1:2)],]
+
+  chr <- as.character(theprobepos[,1])
+  pos <- theprobepos[,3]
+
+  ncis <- rep(0, length(neqtl))
+  names(ncis) <- names(neqtl)
+  for(i in seq(along=ncis)) {
+    if(mx[chr[i], i] >= threshold) {
+      if(!is.na(distance)) {
+        tmp <- scanone_result[scanone_result[,1]==chr[i], c(2,i+2)]
+        tmp <- mean(tmp[tmp[,2]==max(tmp[,2]),1])
+        if(abs(tmp-pos[i]) <= distance) ncis[i] <- 1
+      } else {
+        li <- lodint(scanone_result[,c(1,2,i+2)], chr=chr[i], drop=drop)[,2]
+        if(li[1] <= pos[i] && pos[i] <= li[length(li)])
+          ncis[i] <- 1
+      }
+    }
+  }
+  cbind(ncis=ncis, ntrans=neqtl-ncis)
+}
+@
+
+
+
+<<eqtl_old, echo=FALSE, results=hide>>=
+file <- "Rcache/neqtl_old.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  # load data
+  load("Rcache/f2g_sexcorrection.RData")
+  load("Rcache/mlratios.RData")
+
+  # drop bad hypo arrays
+  hypo.med <- apply(hypo.mlratio, 1, function(a) median(a[!is.na(a) & a > -2 & a < 2]))
+  hypo.omit.old <- rownames(hypo.mlratio)[(hypo.med > 0.016)]
+  hypo.mlratio <- hypo.mlratio[is.na(match(rownames(hypo.mlratio), hypo.omit.old)),]
+
+  # alignment of genotypes and phenotypes
+  id <- vector("list", length(tissues))
+  names(id) <- tissues
+  for(i in tissues) {
+    id[[i]] <- findCommonID(f2g$pheno$MouseNum, rownames(get(arr[i])))
+    assign(arr[i], apply(get(arr[i])[id[[i]]$second, probes2keep], 2, nqrank))
+  }
+  sex <- as.numeric(f2g$pheno$Sex)
+
+  f2g <- calc.genoprob(f2g, err=0.002, step=0.5, stepwidth="max", map="c-f")
+
+  # genome scans, counting no. eQTL
+  neqtl.old <- vector("list", length(tissues))
+  names(neqtl.old) <- tissues
+  library(parallel)
+  for(i in tissues) {
+    tmp <- f2g[,id[[i]]$first]
+    tmpsex <- sex[id[[i]]$first]
+    n.phe <- ncol(get(arr[i]))
+    tmp$pheno <- cbind(get(arr[i]), tmp$pheno)
+
+    # scanone with cluster
+    n.cluster <- 16
+    phecol <- split(1:n.phe, rep(1:n.cluster, ceiling(n.phe / n.cluster))[1:n.phe])
+
+    tmpout <- mclapply(phecol, function(a) {
+                                  b <- scanone(tmp, phe=a, addcovar=tmpsex, intcovar=tmpsex, method="hk")
+                                  count.qtl(b, theprobepos=probepos, distance=NA, drop=2)
+                               },
+                       mc.cores=n.cluster)
+
+    neqtl.old[[i]] <- tmpout[[1]]
+    for(j in 2:n.cluster)
+      neqtl.old[[i]] <- rbind(neqtl.old[[i]], tmpout[[j]])
+  }
+
+  save(neqtl.old, hypo.omit.old, file=file)
+}
+@
+
+<<eqtl_new, echo=FALSE, results=hide>>=
+file <- "Rcache/neqtl_new.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  # load data
+  load("Rcache/f2gc.RData")
+  load("Rcache/mlratios_revised.RData")
+
+  # drop bad hypo arrays
+  hypo.med <- apply(hypo.mlratio, 1, function(a) median(a[!is.na(a) & a > -2 & a < 2]))
+  hypo.omit.new <- rownames(hypo.mlratio)[(hypo.med > 0.016)]
+  hypo.mlratio <- hypo.mlratio[is.na(match(rownames(hypo.mlratio), hypo.omit.new)),]
+
+  # alignment of genotypes and phenotypes
+  id <- vector("list", length(tissues))
+  names(id) <- tissues
+  for(i in tissues) {
+    id[[i]] <- findCommonID(f2gc$pheno$MouseNum, rownames(get(arr[i])))
+    assign(arr[i], apply(get(arr[i])[id[[i]]$second, probes2keep], 2, nqrank))
+  }
+  sex <- as.numeric(f2gc$pheno$Sex)
+
+  f2gc <- calc.genoprob(f2gc, err=0.002, step=0.5, stepwidth="max", map="c-f")
+
+  # genome scans, counting no. eQTL
+  neqtl.new <- vector("list", length(tissues))
+  names(neqtl.new) <- tissues
+  library(parallel)
+  for(i in tissues) {
+    tmp <- f2gc[,id[[i]]$first]
+    tmpsex <- sex[id[[i]]$first]
+    n.phe <- ncol(get(arr[i]))
+    tmp$pheno <- cbind(get(arr[i]), tmp$pheno)
+
+    # scanone with cluster
+    n.cluster <- 16
+    phecol <- split(1:n.phe, rep(1:n.cluster, ceiling(n.phe / n.cluster))[1:n.phe])
+
+    tmpout <- mclapply(phecol, function(a) {
+                                  b <- scanone(tmp, phe=a, addcovar=tmpsex, intcovar=tmpsex, method="hk")
+                                  count.qtl(b, theprobepos=probepos, distance=NA, drop=2)
+                               },
+                       mc.cores=n.cluster)
+
+    neqtl.new[[i]] <- tmpout[[1]]
+    for(j in 2:n.cluster)
+      neqtl.new[[i]] <- rbind(neqtl.new[[i]], tmpout[[j]])
+  }
+
+  save(neqtl.new, hypo.omit.new, file=file)
+}
+@
+
+For the hypo expression data, we omitted a batch of \Sexpr{length(hypo.omit.new)}
+arrays that were found to be bad.  For each transcript in each tissue,
+we used Haley-Knott regression to calculate LOD curves across the
+chromosome.  For each transcript, we find the maximum LOD score on
+each chromosome and count the number of chromosomes that have LOD &ge; 5.
+A transcript is said to have a local-eQTL if the LOD score on its
+chromosome is &ge; 5 and the genomic location of
+the transcript is within the 2-LOD support interval for that eQTL;
+otherwise, a peak above 5 on that chromosome is considered a
+trans-eQTL.
+
+Here is a figure with the numbers of local- and trans-eQTL for each
+tissue, with the original data and with the corrected data.
+
+<<neqtl_table, fig=TRUE, echo=FALSE, results=hide, height=7>>=
+neqtl.old <- t(sapply(neqtl.old, colSums))
+neqtl.new <- t(sapply(neqtl.new, colSums))
+par(mfrow=c(1,2), las=1, mar=c(5.1, 4.1, 4.1, 2.1))
+x <- c(1:6, 1:6)
+y <- c(neqtl.old[,1], neqtl.new[,1])
+grayplot(x, y, xlab="", ylab="No. local-eQTL",
+         col=rep(c("red", "blue"), rep(6,2)), pch=16,
+         ylim=c(0, max(y)*1.05), hlines=seq(0, 4000, by=1000),
+         vlines=1:6, xat=NA, yaxs="i", main="local-eQTL", col.lab="blue")
+axis(side=1, 1:6, tissues, mgp=c(3, 0.5, 0), tick=FALSE, las=2)
+mtext(side=1, line=3.6, "Tissue", col="blue")
+legend("bottomright", pch=16, col=c("blue", "red"), c("Corrected",
+       "Original"), bg="white")
+
+y <- c(neqtl.old[,2], neqtl.new[,2])
+grayplot(x, y, xlab="", ylab="No. trans-eQTL",
+         col=rep(c("red", "blue"), rep(6,2)), pch=16,
+         ylim=c(0, max(y)*1.05), hlines=seq(0, 25000, by=5000),
+         vlines=1:6, xat=NA, yaxs="i", main="trans-eQTL", col.lab="blue")
+axis(side=1, 1:6, tissues, mgp=c(3, 0.5, 0), tick=FALSE, las=2)
+mtext(side=1, line=3.6, "Tissue", col="blue")
+@
+
+Across all tissues, there were \Sexpr{sum(neqtl.old[,1])} local-eQTL
+and \Sexpr{sum(neqtl.old[,2])} trans-eQTL with the original data.
+After correcting the sample mixups, these numbers increased to
+\Sexpr{sum(neqtl.new[,1])} and \Sexpr{sum(neqtl.new[,2])} for
+local-eQTL and trans-eQTL, respectively.  These are increases of
+\Sexpr{round((sum(neqtl.new[,1])/sum(neqtl.old[,1])-1)*100)}% and
+\Sexpr{round((sum(neqtl.new[,2])/sum(neqtl.old[,2])-1)*100)}%,
+respectively.
+
+=== eQTL analysis, LOD > 10 ===
+
+In response to a question from a reviewer, let's repeat this, looking
+for eQTL with LOD &ge; 10.
+
+
+<<eqtl_old_10, echo=FALSE, results=hide>>=
+file <- "Rcache/neqtl_old_10.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  # load data
+  load("Rcache/f2g_sexcorrection.RData")
+  load("Rcache/mlratios.RData")
+
+  # drop bad hypo arrays
+  hypo.med <- apply(hypo.mlratio, 1, function(a) median(a[!is.na(a) & a > -2 & a < 2]))
+  hypo.omit.old <- rownames(hypo.mlratio)[(hypo.med > 0.016)]
+  hypo.mlratio <- hypo.mlratio[is.na(match(rownames(hypo.mlratio), hypo.omit.old)),]
+
+  # alignment of genotypes and phenotypes
+  id <- vector("list", length(tissues))
+  names(id) <- tissues
+  for(i in tissues) {
+    id[[i]] <- findCommonID(f2g$pheno$MouseNum, rownames(get(arr[i])))
+    assign(arr[i], apply(get(arr[i])[id[[i]]$second, probes2keep], 2, nqrank))
+  }
+  sex <- as.numeric(f2g$pheno$Sex)
+
+  f2g <- calc.genoprob(f2g, err=0.002, step=0.5, stepwidth="max", map="c-f")
+
+  # genome scans, counting no. eQTL
+  neqtl.old.10 <- vector("list", length(tissues))
+  names(neqtl.old.10) <- tissues
+  library(parallel)
+  for(i in tissues) {
+    tmp <- f2g[,id[[i]]$first]
+    tmpsex <- sex[id[[i]]$first]
+    n.phe <- ncol(get(arr[i]))
+    tmp$pheno <- cbind(get(arr[i]), tmp$pheno)
+
+    # scanone with cluster
+    n.cluster <- 16
+    phecol <- split(1:n.phe, rep(1:n.cluster, ceiling(n.phe / n.cluster))[1:n.phe])
+
+    tmpout <- mclapply(phecol, function(a) {
+                                  b <- scanone(tmp, phe=a, addcovar=tmpsex, intcovar=tmpsex, method="hk")
+                                  count.qtl(b, theprobepos=probepos, distance=NA, drop=2, threshold=10)
+                               },
+                       mc.cores=n.cluster)
+
+    neqtl.old.10[[i]] <- tmpout[[1]]
+    for(j in 2:n.cluster)
+      neqtl.old.10[[i]] <- rbind(neqtl.old.10[[i]], tmpout[[j]])
+  }
+
+  save(neqtl.old.10, file=file)
+}
+@
+
+<<eqtl_new_10, echo=FALSE, results=hide>>=
+file <- "Rcache/neqtl_new_10.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  # load data
+  load("Rcache/f2gc.RData")
+  load("Rcache/mlratios_revised.RData")
+
+  # drop bad hypo arrays
+  hypo.med <- apply(hypo.mlratio, 1, function(a) median(a[!is.na(a) & a > -2 & a < 2]))
+  hypo.omit.new <- rownames(hypo.mlratio)[(hypo.med > 0.016)]
+  hypo.mlratio <- hypo.mlratio[is.na(match(rownames(hypo.mlratio), hypo.omit.new)),]
+
+  # alignment of genotypes and phenotypes
+  id <- vector("list", length(tissues))
+  names(id) <- tissues
+  for(i in tissues) {
+    id[[i]] <- findCommonID(f2gc$pheno$MouseNum, rownames(get(arr[i])))
+    assign(arr[i], apply(get(arr[i])[id[[i]]$second, probes2keep], 2, nqrank))
+  }
+  sex <- as.numeric(f2gc$pheno$Sex)
+
+  f2gc <- calc.genoprob(f2gc, err=0.002, step=0.5, stepwidth="max", map="c-f")
+
+  # genome scans, counting no. eQTL
+  neqtl.new.10 <- vector("list", length(tissues))
+  names(neqtl.new.10) <- tissues
+  library(parallel)
+  for(i in tissues) {
+    tmp <- f2gc[,id[[i]]$first]
+    tmpsex <- sex[id[[i]]$first]
+    n.phe <- ncol(get(arr[i]))
+    tmp$pheno <- cbind(get(arr[i]), tmp$pheno)
+
+    # scanone with cluster
+    n.cluster <- 16
+    phecol <- split(1:n.phe, rep(1:n.cluster, ceiling(n.phe / n.cluster))[1:n.phe])
+
+    tmpout <- mclapply(phecol, function(a) {
+                                  b <- scanone(tmp, phe=a, addcovar=tmpsex, intcovar=tmpsex, method="hk")
+                                  count.qtl(b, theprobepos=probepos, distance=NA, drop=2, threshold=10)
+                               },
+                       mc.cores=n.cluster)
+
+    neqtl.new.10[[i]] <- tmpout[[1]]
+    for(j in 2:n.cluster)
+      neqtl.new.10[[i]] <- rbind(neqtl.new.10[[i]], tmpout[[j]])
+  }
+
+  save(neqtl.new.10, file=file)
+}
+@
+
+<<neqtl_table_10, fig=TRUE, echo=FALSE, results=hide, height=7>>=
+neqtl.old.10 <- t(sapply(neqtl.old.10, colSums))
+neqtl.new.10 <- t(sapply(neqtl.new.10, colSums))
+par(mfrow=c(1,2), las=1, mar=c(5.1, 4.1, 4.1, 2.1))
+x <- c(1:6, 1:6)
+y <- c(neqtl.old.10[,1], neqtl.new.10[,1])
+grayplot(x, y, xlab="", ylab="No. local-eQTL",
+         col=rep(c("red", "blue"), rep(6,2)), pch=16,
+         ylim=c(0, max(y)*1.05), hlines=seq(0, 2000, by=500),
+         vlines=1:6, xat=NA, yaxs="i", main="local-eQTL", col.lab="blue")
+axis(side=1, 1:6, tissues, mgp=c(3, 0.5, 0), tick=FALSE, las=2)
+mtext(side=1, line=3.6, "Tissue", col="blue")
+legend("bottomright", pch=16, col=c("blue", "red"), c("Corrected",
+       "Original"), bg="white")
+
+y <- c(neqtl.old.10[,2], neqtl.new.10[,2])
+grayplot(x, y, xlab="", ylab="No. trans-eQTL",
+         col=rep(c("red", "blue"), rep(6,2)), pch=16,
+         ylim=c(0, max(y)*1.05), hlines=seq(0, 5000, by=1000),
+         vlines=1:6, xat=NA, yaxs="i", main="trans-eQTL", col.lab="blue")
+axis(side=1, 1:6, tissues, mgp=c(3, 0.5, 0), tick=FALSE, las=2)
+mtext(side=1, line=3.6, "Tissue", col="blue")
+@
+
+
+Across all tissues, there were \Sexpr{sum(neqtl.old.10[,1])} local-eQTL
+and \Sexpr{sum(neqtl.old.10[,2])} trans-eQTL with the original data.
+After correcting the sample mixups, these numbers increased to
+\Sexpr{sum(neqtl.new.10[,1])} and \Sexpr{sum(neqtl.new.10[,2])} for
+local-eQTL and trans-eQTL, respectively.  These are increases of
+\Sexpr{round((sum(neqtl.new.10[,1])/sum(neqtl.old.10[,1])-1)*100)}% and
+\Sexpr{round((sum(neqtl.new.10[,2])/sum(neqtl.old.10[,2])-1)*100)}%,
+respectively.
+
+
+
+== Summary ==
+
+We have identified strong support for a large number of DNA sample mixups
+in this project; we further identified a much smaller number of sample mixups
+within each set of RNA samples.  Fortunately, we are able to correct
+the majority of these problems and recover from the mistakes.
+
+As should be expected, correcting these sample mixups leads to great
+improvement in the QTL mapping results, both for clinical phenotypes,
+such as insulin level, and in the expression traits.

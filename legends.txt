@@ -1,0 +1,281 @@
+>KWB_FIG1_LEGEND
+  Scheme for evaluating the similarity between expression
+  arrays for different tissues.  We first consider the expression of
+  each array probe for samples assayed for both tissues (A) and calculate
+  the between-tissue correlation in expression (B).  We identify the
+  subset of array probes with correlation $>$ 0.75 (shaded region in C)
+  and calculate the correlation in gene expression for one sample in
+  the first tissue and another sample in the second tissue, across
+  these selected probes.  This forms a similarity matrix (D), for which
+  darker squares indicate greater similarity.  Orange
+  squares indicate missing values (samples assayed in one tissue
+  but not the other).
+<
+
+>KWB_FIG2_LEGEND
+  Scheme for evaluating the similarity between genotypes and expression
+  arrays.  We first identify a set of probes with
+  strong local eQTL.  For each such eQTL, we use the samples with both
+  genotype and expression data (A) to form a classifier for predicting
+  eQTL genotype from the expression value (B).  We then compare the
+  observed eQTL genotypes for one sample to the inferred eQTL
+  genotypes, from the classifiers, for another sample (C).  The
+  proportion of matches, between the observed and inferred genotypes,
+  forms a similarity matrix (D), for which darker squares indicate
+  greater similarity.  Orange squares indicate missing values (for
+  example, samples with genotype data but no expression data).
+<
+
+>KWB_FIG3_LEGEND
+  Self similarity (median correlation across tissue pairs) versus
+  maximum similarity for the expression arrays for each tissue.  The
+  diagonal gray line corresponds to equality.  Green points are
+  inferred to be sample mix-ups. Gray points correspond to arrays for
+  which the self similarity is maximal.  Red points correspond to
+  special cases (see the text).  There were
+  27~samples assayed only for kidney; these have
+  missing self similarity values.
+<
+
+>KWB_FIG4_LEGEND
+  The mRNA sample mix-ups for the six tissues.  Double-headed arrows
+  indicate a sample swap.  The trio of points in adipose corresponds
+  to a three-way swap.  The pink circles with a single-headed arrow,
+  in islet and liver, are sample duplicates.  The questionable case in
+  kidney indicates a potential sample mixture arrayed twice.
+<
+
+>KWB_FIG5_LEGEND
+  Plot of islet expression vs observed genotype for an example
+  probe.  Points are colored by the inferred genotype, based on a
+  k-nearest neighbor classifier, with yellow, green, and blue
+  corresponding to BB, BR, and RR, respectively, where B = B6 and R =
+  BTBR.  Salmon-colored points lie at the boundary between two
+  clusters and were not assigned.
+<
+
+>KWB_FIG6_LEGEND
+  Self similarity (proportion matches between observed and
+  inferred eQTL genotypes, combined across tissues) versus maximum
+  similarity for the DNA samples.  The diagonal gray line corresponds to
+  equality.  Samples with missing self similarity (at bottom) were not
+  intended to have expression assays performed.  Gray points
+  correspond to DNA samples that were correctly labeled.  Green points
+  correspond to sample mix-ups that are fixable (the correct label can
+  be determined).  Red points comprise both samples mix-ups that
+  cannot be corrected as well as samples that may be correct but
+  cannot be verified as no expression data is
+  available.
+<
+
+>KWB_FIG7_LEGEND
+  The DNA sample mix-ups on the seven 96-well plates used for
+  genotyping.  Black dots indicate that the correct DNA was put in the
+  well.  Blue arrows point from where a sample should have been placed to
+  where it was actually placed; the different shades of blue convey no
+  meaning.  Red X's indicate DNA samples that were omitted.  Orange
+  arrowheads indicate wells with incorrect samples, but the sample
+  placed there is of unknown origin.  Purple and green arrow-heads
+  indicate cases where the sample placed in the well was incorrect,
+  but the DNA that was supposed to be there was not found; with the
+  purple cases, there was corresponding gene expression data, while
+  for the green cases, there was no corresponding gene expression
+  data.  Pink circles (e.g., well D02 on plate 1631) indicate sample
+  duplicates.  Gray dots indicate that the sample placed in the well
+  cannot be verified, as there was no corresponding gene expression
+  data.  Gray circles indicate controls or unused wells.
+<
+
+>KWB_FIG8_LEGEND
+  LOD curves for 10 week insulin level, before (salmon color) and
+  after (blue) correction of the sample mix-ups.
+<
+
+>KWB_FIG9_LEGEND
+  Numbers of identified local- and \emph{trans}-eQTL with LOD $\ge$ 5,
+  with the original data (red) and after correction of the sample
+  mix-ups (blue), across 37,797 array probes with known genomic
+  location.  An eQTL was considered local if the 2-LOD support
+  interval contained the corresponding probe; otherwise it was
+  considered \emph{trans}.
+<
+
+>KWB_FIGS1_LEGEND
+The behavior of the X chromosome
+in the intercross (BTBR $\times$ B6) $\times$ (BTBR $\times$ B6).  In
+the F$_2$ generation, females are homozygous BTBR or heterozygous,
+while males are hemizygous BTBR or B6.  The small bar is the Y
+chromosome.
+<
+
+>KWB_FIGS2_LEGEND
+X chromosome genotypes for
+19~female mice and 17~male mice with genotypes that are incompatible
+with their sex.  Females should be homozygous BTBR (RR, blue) or
+heterozygous (green).  Males should be hemizygous B6 (BY, yellow) or
+hemizygous BTBR (RY, blue).  The top four males have a single
+incompatibility that could reasonably be a genotyping error.
+<
+
+>KWB_FIGS3_LEGEND
+Example scatterplot of gene expression in
+liver versus kidney for a single individual (Mouse3567).  Gray points
+are all probes on the array; red points are the 155 probes with correlation
+across mice $>$ 0.75 between liver and kidney.
+<
+
+>KWB_FIGS4_LEGEND
+Density estimates of the
+between-tissue correlations for all probes on the expression arrays.
+In each panel, the distributions for the five pairs of tissues,
+including a given tissue, are displayed.
+<
+
+>KWB_FIGS5_LEGEND
+Histograms of similarity measures for the expression arrays
+  for each tissue, versus all other tissues combined.  The panels on
+  the left include self-self similarities (along the diagonal of the
+  similarity matrices); the panels on the right include all
+  self-nonself similarities (the off-diagonal elements of the
+  similarity matrices). Self-self values $<$ 0.8 and self-nonself values
+  $>$ 0.8 are highlighted with red tick marks.  The two modes in the
+  self-nonself distributions are for opposite-sex and same-sex pairs.
+<
+
+>KWB_FIGS6_LEGEND
+Second highest similarity (median
+correlation across tissue pairs) versus maximum similarity for the
+expression arrays for each tissue.  The diagonal gray line corresponds
+to equality.  Green points correspond to arrays inferred to be sample
+mix-ups.  Gray points correspond to arrays for which the self
+similarity is maximal.  Red points correspond to special cases, as in
+Figure~1 (see the text).
+<
+
+>KWB_FIGS7_LEGEND
+Scatterplots for expression in
+pairs of tissues for an inferred sample swap, between Mouse3655 and
+Mouse3659 in gastroc.
+<
+
+>KWB_FIGS8_LEGEND
+Scatterplots for expression in
+pairs of tissues for an inferred sample duplicate, with Mouse3136 in
+liver also arrayed as Mouse3141 liver.  In the bottom row, the panels
+with gray points are identical data, and the panels with red points
+are the unintended duplicates.
+<
+
+>KWB_FIGS9_LEGEND
+Between-tissue correlations for
+pairs of tissues for an inferred sample duplicate, with Mouse3141 in
+liver really being a duplicate of Mouse3136 in liver.
+Correlations are calculated
+using tissue-pair-specific probes that show between-tissue
+correlation, across all mice, of $>$ 0.75.  Tissue pairs are
+abbreviated by the first letter of the tissues' names.  Red points
+involve Mouse3136 liver, green points involve Mouse3141 liver, and the
+purple point involves both.
+<
+
+>KWB_FIGS10_LEGEND
+Scatterplots for expression in
+pairs of tissues for a potential sample mixture, of Mouse3484 and
+Mouse3503 in kidney.  In the second from the bottom row, the panels
+with gray points are identical data, and the panels with red points
+are the unintended duplicates.
+<
+
+>KWB_FIGS11_LEGEND
+Between-tissue correlations for
+pairs of tissues for a potential sample mixture, of Mouse3484 and
+Mouse3503 in kidney.  Correlations are calculated using
+tissue-pair-specific probes that show between-tissue correlation,
+across all mice, of $>$ 0.75.  Tissue pairs are abbreviated by the
+first letter of the tissues' names.  Red points
+involve Mouse3484 kidney, green points involve Mouse3503 kidney, and the
+purple point involves both.
+<
+
+>KWB_FIGS12_LEGEND
+Scatterplots of the average
+expression for four Y chromosome genes versus expression of the \emph{Xist\/}
+gene in each tissue, before and after correction of sample mix-ups.
+Females are in red; males are in blue.  The unusual pattern in
+hypothalamus is due to a batch of 120 poorly behaved arrays.
+<
+
+>KWB_FIGS13_LEGEND
+Example scatterplots of islet expression
+for pairs of probes at the same genomic location.
+<
+
+>KWB_FIGS14_LEGEND
+Positions of local eQTL used for
+the aligning the expression arrays and genotype data.  Marker
+locations are indicated by horizontal line segments on the genetic
+map.  The points to the right of each chromosome indicate the eQTL
+locations, with different colors for different tissues.
+<
+
+>KWB_FIGS15_LEGEND
+  Histograms of similarities between the genotypes and the
+  expression arrays (the proportion of matches between observed and
+  inferred eQTL genotypes)
+  for each tissue.  The panels on
+  the left include self-self similarities (along the diagonal of the
+  similarity matrices); the panels on the right include all
+  self-nonself similarities (the off-diagonal elements of the
+  similarity matrices). Self-self values $<$ 0.8 and self-nonself values
+  $>$ 0.8 are highlighted with red tick marks.
+<
+
+>KWB_FIGS16_LEGEND
+Self similarity (proportion matches between observed and
+  inferred eQTL genotypes, considering each tissue separately) versus
+  maximum similarity for the DNA samples.  The diagonal gray line
+  corresponds to equality.  Samples with missing self similarity (at
+  top) did not have an expression assay performed for that tissue.
+  Points are colored based on the inferred status of the corresponding
+  samples based on the combined information from all tissues.  Gray
+  points correspond to DNA samples that were correctly labeled.  Green
+  points correspond to sample mix-ups that are fixable (the correct
+  label can be determined).  Red points comprise both samples mix-ups
+  that cannot be corrected as well as samples that may be correct but
+  cannot be verified as no expression data is available.
+<
+
+>KWB_FIGS17_LEGEND
+Second highest similarity (proportion matches between
+  observed and inferred eQTL genotypes, combined across tissues)
+  versus maximum similarity for the DNA samples.  The diagonal gray
+  line corresponds to equality.  Gray points correspond to DNA samples
+  that were correctly labeled.  Green points correspond to sample
+  mix-ups that are fixable (the correct label can be determined).
+  Red points comprise both samples mix-ups that cannot be corrected
+  as well as samples that may be correct but cannot be verified as no
+  expression data is available.
+<
+
+>KWB_FIGS18_LEGEND
+Panels A-D contain the example scatterplots of islet expression for
+  pairs of probes at the same genomic location, as in Figure~S13,
+  following correction of the sample mix-ups. Panel E contains the plot
+  of islet expression vs observed genotype for an example probe, as in
+  Figure~5, following correction of the sample mix-ups.
+<
+
+>KWB_FIGS19_LEGEND
+LOD curves for agouti (A) and tufted (B) coat traits with the
+  original data (red) and after correction of the sample mix-ups
+  (blue).
+<
+
+>KWB_FIGS20_LEGEND
+  Numbers of identified local- and \emph{trans}-eQTL with LOD $\ge$ 10,
+  with the original data (red) and after correction of the sample
+  mix-ups (blue), across 37,797 array probes with known genomic
+  location.  An eQTL was considered local if the 2-LOD support
+  interval contained the corresponding probe; otherwise it was
+  considered \emph{trans}.
+<

@@ -1,0 +1,1214 @@
+\documentclass[12pt,letterpaper]{article}
+
+\usepackage[authoryear]{natbib}
+\usepackage{times}
+\usepackage{amsmath,amsfonts}
+\usepackage{graphicx}
+\usepackage{setspace}
+\usepackage{indentfirst}
+\usepackage{url}
+\usepackage[font=footnotesize]{caption}
+
+% revise margins
+\setlength{\headheight}{0.0in}
+\setlength{\headsep}{0.0in}
+\setlength{\topmargin}{0.0in}
+\setlength{\textheight}{8.9in}
+\setlength{\footskip}{0.4in}
+\setlength{\oddsidemargin}{0.0in}
+\setlength{\evensidemargin}{0.0in}
+\setlength{\textwidth}{6.5in}
+
+\setlength{\rightskip}{0pt plus 1fil} % makes ragged right
+
+%bibliography format
+\usepackage[authoryear]{natbib}
+\bibpunct{(}{)}{;}{a}{}{,}
+
+\newcommand{\LOD}{\text{LOD}}
+
+% hanging environment for Figure legends
+\newenvironment{hanging}
+{\begin{list}{}
+        {\setlength{\labelwidth}{0in}
+         \setlength{\leftmargin}{1em}
+         \setlength{\itemindent}{-1em}
+        }
+}
+{\end{list}}
+
+\begin{document}
+
+%%%%%%%%% knitr stuff %%%%%%%%%%%%%%%%%
+<<options, echo=FALSE, results="hide">>=
+library(knitr)
+opts_chunk$set(message=FALSE)
+options(width=87, digits=3, scipen=4)
+numberastext <-
+function(x) {
+  if(length(x) != 1) {
+    warning("This is only for single values.")
+    return(x)
+  }
+  textnumbers <- c("one", "two", "three", "four", "five",
+                   "six", "seven", "eight", "nine", "ten")
+  m <- match(x, 1:10)
+  if(!is.na(m)) return(textnumbers[x])
+  x
+}
+@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\setstretch{2.0}
+
+\vspace*{8mm}
+\begin{center}
+
+\textbf{\Large Identification and correction of sample mix-ups \\[18pt]
+in expression genetic data: A case study}
+
+
+\bigskip \bigskip \bigskip \bigskip
+
+{\large Karl W. Broman$^{*,1}$,
+Mark P. Keller$^{\dagger}$,
+Aimee Teo Broman$^{*}$, \\[-4pt]
+Christina Kendziorski$^{*}$,
+Brian S. Yandell$^{\ddagger, \S}$,
+\'Saunak Sen$^{**,2}$,
+Alan D. Attie$^{\dagger}$}
+
+\bigskip \bigskip
+
+$^{*}$Department of Biostatistics and Medical Informatics,
+$^{\dagger}$Department of Biochemistry,
+$^{\ddagger}$Department of Statistics,
+and $^{\S}$Department of Horticulture,
+University of Wisconsin--Madison, Madison, Wisconsin
+53706, and
+$^{**}$Department of Epidemiology and Biostatistics, University
+of California, San Francisco, California 94107
+\end{center}
+
+
+
+\newpage
+
+\noindent \textbf{Running head:} Correcting sample mix-ups in eQTL data
+
+
+\bigskip \bigskip \bigskip
+
+\noindent \textbf{Key words:} quality control, microarrays,
+genetical genomics, mislabeling errors, eQTL
+
+
+
+\bigskip \bigskip \bigskip
+
+\noindent \textbf{$^1$Corresponding author:}
+
+\begin{tabular}{lll}
+ \\
+ \hspace{1cm} & \multicolumn{2}{l}{Karl W Broman} \\
+ & \multicolumn{2}{l}{Department of Biostatistics and Medical Informatics} \\
+ & \multicolumn{2}{l}{University of Wisconsin--Madison} \\
+ & \multicolumn{2}{l}{2126 Genetics-Biotechnology Center} \\
+ & \multicolumn{2}{l}{425 Henry Mall} \\
+ & \multicolumn{2}{l}{Madison, WI 53706} \\
+ \\
+ & Phone: & 608--262--4633 \\
+ & Email: & \verb|kbroman@biostat.wisc.edu|
+\end{tabular}
+
+
+\bigskip \bigskip \bigskip
+
+\noindent \textbf{$^2$Present address:} Division of Biostatistics,
+Department of Preventive Medicine, University of Tennessee Health
+Science Center, Memphis, TN 38163
+
+\newpage
+
+
+
+\centerline{\sffamily \textbf{Abstract}}
+
+In a mouse intercross with more than 500 animals and genome-wide gene
+expression data on six tissues, we identified a high proportion (18\%)
+of sample mix-ups in the genotype data.
+Local expression quantitative trait loci (eQTL; genetic
+loci influencing gene expression) with extremely large effect were
+used to form a classifier to predict an individual's eQTL genotype
+based on expression data alone.  By considering multiple eQTL and
+their related transcripts, we identified numerous individuals whose
+predicted eQTL genotypes (based on their expression data) did not
+match their observed genotypes, and then went on to identify other
+individuals whose genotypes did match the predicted eQTL genotypes.
+The concordance of predictions across six tissues indicated that the
+problem was due to mix-ups in the genotypes
+(though we further identified a small
+number of sample mix-ups in each of the six panels of gene expression
+microarrays).
+Consideration of the
+plate positions of the DNA samples indicated a number of off-by-one and
+off-by-two errors, likely the result of pipetting errors.  Such sample
+mix-ups can be a problem in any genetic study, but eQTL
+data allow us to identify, and even correct, such problems.
+Our methods have been implemented in an R package, R/lineup.
+
+
+
+
+\newpage
+\centerline{\sffamily \textbf{Introduction}}
+
+To map the genetic loci influencing a complex phenotype, one seeks to
+establish an association between genotype and phenotype.  In such an
+effort, the maintenance of the concordance between genotyped and
+phenotyped samples and data is critical.  Sample mislabelings and
+other sample mix-ups will weaken associations, resulting in reduced
+power and biased estimates of locus effects.  In traditional genetic
+studies, one has limited ability to detect sample mix-ups and almost
+no ability to correct such problems.  Inconsistencies between
+subjects' sex and X chromosome genotypes may reveal some problems, and
+in family studies, some errors may be revealed through Mendelian
+inconsistencies at markers, but we will generally be blind to most
+errors.
+
+In expression genetics studies, in which genome-wide
+gene expression is assayed along with genotypes at genetic markers,
+the presence of expression quantitative trait loci (eQTL) with
+profound effect on gene expression (particularly local-eQTL, in which
+a polymorphism near a gene affects the expression of
+that gene) provides an opportunity to not just identify but also
+correct sample mix-ups.
+
+In a mouse intercross with more than 500 animals and genome-wide gene
+expression data on six tissues, we identified a high proportion (18\%)
+of sample mix-ups in the genotype data.  We further identified a small
+number of mix-ups among the expression arrays in each tissue.
+
+A number of investigators have developed methods for identifying such
+sample mix-ups \citep{Westra2011, Schadt2012, Lynch2012, Ekstrom2012},
+and a similar approach was applied by \citet{Baggerly2008,
+Baggerly2009} in their forensic bioinformatics analyses of the Duke
+debacle.  We have developed a further approach that is simple but
+effective.  We illustrate its use through a particularly dramatic
+example.
+
+
+
+\clearpage
+
+\centerline{\sffamily \textbf{Methods}}
+
+\noindent \textbf{\sffamily Mice and genotyping}
+\nopagebreak
+
+C57BL/6J (abbreviated B6 or B) and BTBR \emph{T}$^+$ \emph{tf}/J
+(abbreviated BTBR or R) mice were purchased from the Jackson
+Laboratory (Bar Harbor, ME) and bred at the University of
+Wisconsin--Madison.  The \emph{Lep$^{ob}$\/} mutation was introgressed
+into all strains using heterozygous parents to generate homozygous
+\emph{Lep$^{ob/ob}$\/} offspring.  F$_2$ mice, all
+\emph{Lep$^{ob/ob}$\/}, were the offspring of F$_1$ parents derived
+from a cross between BTBR females and B6 males (Figure~S1).
+F$_2$ mice and a small number of parental and F$_1$ controls were
+genotyped with the 5K GeneChip (Affymetrix).
+
+
+
+
+
+\bigskip
+\noindent \textbf{\sffamily Gene expression microarrays}
+\nopagebreak
+
+Gene expression was assayed with custom two-color ink-jet microarrays
+manufactured by Agilent Technologies (Palo Alto, CA).
+RNA preparations were performed at Rosetta Inpharmatics (Merck \&
+Co.). Six tissues were considered: adipose, gastrocnemius muscle
+(abbreviated gastroc), hypothalamus (abbreviated hypo), pancreatic
+islets (abbreviated islet), kidney, and liver.  Tissue-specific mRNA
+pools were used for the second channel, and gene expression was
+quantified as the ratio of the mean log$_{10}$ intensity (mlratio).
+For further details, see \citet{Keller2008}.
+
+
+
+\bigskip
+\noindent \textbf{\sffamily Sample mix-ups in the gene expression arrays}
+\nopagebreak
+
+Let $x^s_{ip}$ denote the gene expression measure for sample $i$ at
+array probe $p$ in tissue $s$.  We first considered each probe and each
+pair of tissues and calculated the between-tissue correlation across
+samples, omitting any samples with missing data for that probe in
+either tissue.  We identified the subset of probes, for each tissue
+pair, with correlation $>$ 0.75.  With this subset of probes, we then
+calculated the correlation between sample $i$ in tissue $s$ and sample
+$j$ in tissue $t$; call it $r^{st}_{ij}$.  As an illustration,
+consider the schematic in Figure~\ref{fig:eve_scheme}: for each pair of tissues, we
+identified the subset of probes with high between-tissue correlation
+(the shaded region) and then evaluated the correlation between a
+sample in one tissue and another sample in the other tissue, across
+that subset of probes.
+
+%%%%%%%%%%%%%
+%% Figure 1
+\begin{figure}[p]
+\centerline{\includegraphics[width=\textwidth]{Figs/fig1.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG1_LEGEND\label{fig:eve_scheme}}
+\end{figure}
+%%%%%%%%%%%%%
+
+We then summarized the similarity between sample $i$ in tissue $s$
+and sample $j$ in the other tissues by the median correlation across
+tissue pairs that include tissue $s$,
+$r^s_{ij} = \text{median}\{r^{st}_{ij} : t \ne s\}$.  Of course, we
+considered only pairs of tissues $(s,t)$ for which sample $i$ was
+measured in tissue $s$ and sample $j$ was measured in tissue $t$.
+
+Sample mix-ups in tissue $s$ were identified as samples $i$ for
+which the self similarity, $r^s_{ii}$, was small, but for which there
+existed some array with high similarity: $\max_{j \ne i} r^s_{ij}$ is
+large.  We then inferred the correct label for sample $i$ in tissue
+$s$ to be $\arg \max_{j \ne i} r^s_{ij}$.  In other words, viewing
+$r^s_{ij}$ as a similarity matrix, we were looking for rows with a
+small value on the diagonal, but with some large off-diagonal element
+in that row.  In order to ensure confidence in the relabeling of such
+samples, we compared the maximum value in the row to the second-highest
+value.
+
+To further investigate possible sample duplicates within a tissue,
+we considered the subset of probes with correlation $>$ 0.75 with at
+least one other tissue, and then calculated between-sample
+correlations, across the chosen subset of probes, within that tissue.
+
+
+\bigskip
+\noindent \textbf{\sffamily Sample mix-ups in the DNA samples}
+\nopagebreak
+
+In our investigation of potential sample mix-ups in the DNA samples, we
+first calculated multipoint genotype probabilities at all markers and
+at pseudomarker positions between markers.  The pseudomarker positions
+were placed at evenly spaced locations between markers, with a maximum
+spacing of 0.5~cM between adjacent markers or pseudomarkers.  The
+multipoint genotype probabilities calculations were performed via a
+hidden Markov model (HMM), with an assumed genotyping error rate of
+0.2\% and with the Carter-Falconer map function \citep{Carter1951}.
+
+We first considered each tissue, individually, and identified the
+subset of probes with a strong local-eQTL.  We considered all array
+probes with known genomic location and on an autosome, identified the
+nearest marker or pseudomarker to the location of the probe, and
+calculated a LOD score (log$_{10}$ likelihood ratio) assessing the association between genotype at
+that location and the gene expression of that probe.  The LOD score
+was calculated by Haley-Knott regression \citep{Haley1992}, a quick
+approximation to standard interval mapping \citep{Lander1989}.
+Calculations were performed at a single location for each array probe,
+rather than with a scan of the genome.  We chose the subset of probes
+with LOD $>$ 100.
+
+<<num_eqtl, echo=FALSE, results="hide">>=
+attach("Analysis/R/Rcache/dgve.RData")
+neqtl <- sapply(dgve[1:6], function(a) ncol(attr(a, "obsg")))
+tab <- lapply(dgve[1:6], function(a) table(sapply(attr(a, "y"), ncol)))
+twoprobes <- sapply(tab, function(a) a["2"])
+threeprobes <- sapply(tab, function(a) a["3"])
+@
+
+Continuing to focus on one tissue at a time, we considered the set of
+local-eQTL locations and the corresponding probe or probes.
+(Generally there was a single probe corresponding to a given eQTL
+location, but in a small number of instances for each tissue, there
+were a pair of probes at the same eQTL location; for islet, there were
+\Sexpr{numberastext(threeprobes[4])}~eQTL with three corresponding probes, and for
+adipose there was \Sexpr{numberastext(threeprobes[1])} such trio.)  For each eQTL
+position and for each mouse, we took the genotypes with maximal
+multipoint probability to be the observed eQTL genotype, provided that
+this exceeded 0.99; if no genotype had probability $>$ 0.99, the
+observed eQTL genotype was treated as missing.
+
+Considering each eQTL in a tissue individually, we then formed a
+$k$-nearest neighbor classifier, with $k=40$, for predicting eQTL
+genotype from the expression values for the corresponding probe or
+probes.  For a given mouse, if more than 80\% of the 40 nearest
+neighbors, by Euclidean distance, shared the same observed eQTL
+genotype, this was taken to be the inferred eQTL genotype for that mouse.
+If no more than 80\% of the 40 nearest neighbors shared a common
+genotype, the inferred eQTL genotype was treated as missing.
+
+In order to filter out samples that were clearly incorrect and improve
+our classifiers, we then calculated the proportion of matches, for
+each sample, between the observed eQTL genotypes and the corresponding
+inferred eQTL genotypes, omitted samples for which the proportion of
+matches was $<$ 0.7, and rederived the $k$-nearest neighbor classifiers
+with the subset of samples deemed likely correct.
+
+As an illustration, consider the schematic in Figure~\ref{fig:gve_scheme}: for each
+tissue, we identified a subset of array probes with strong local-eQTL,
+we derived classifiers for predicting eQTL genotype from the
+corresponding expression phenotypes, and then constructed a matrix of
+inferred eQTL genotypes.  As a measure of similarity between a DNA
+sample and an mRNA sample, we calculated the proportion of matches
+between the observed eQTL genotypes for the DNA sample and the
+inferred eQTL genotypes for the mRNA sample.
+
+%%%%%%%%%%%%%
+%% Figure 2
+\begin{figure}[p]
+\centerline{\includegraphics[width=\textwidth]{Figs/fig2.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG2_LEGEND\label{fig:gve_scheme}}
+\end{figure}
+%%%%%%%%%%%%%
+
+To combine the tissue-specific similarity measures across the six
+tissues, we simply took the overall proportion of matching genotypes,
+across all eQTL and across all tissues.
+
+As in the investigation of sample mix-ups within the expression
+arrays, we treated the proportions of matches between observed and inferred eQTL
+genotypes as a similarity matrix.  Problem DNA samples were identified
+as rows for which the value on the diagonal (the self similarity) was
+small.  In such rows, we inferred the correct label to be that of the
+maximal off-diagonal value, provided that this maximum was large and
+was well above the second-largest value.
+
+
+
+\bigskip
+\noindent \textbf{\sffamily QTL analysis}
+\nopagebreak
+
+To characterize the improvement in results following correction of
+sample mix-ups, we performed QTL analysis with several traits of
+interest, including the expression traits in each tissue, with the
+original data and with the corrected data.  In the corrected data, we
+omitted the DNA samples that could not be verified to be correct
+(that is, those with no corresponding gene expression data.)
+
+\bigskip
+\noindent \textbf{\emph{Insulin:}} We first considered a clinical phenotype
+of considerable interest: 10 week plasma insulin.  QTL analysis was
+performed by Haley-Knott regression \citep{Haley1992}, with log
+insulin, and with sex included as an interactive covariate (that is,
+allowing the effects of QTL to be different in the two sexes).
+
+\bigskip
+\noindent \textbf{\emph{Agouti and tufted coat:}} We considered two simple
+Mendelian traits: agouti coat color (due to a single gene on
+chromosome 2) and tufted coat (due to a single gene on chromosome 17).
+QTL analysis was performed treating each phenotype as a binary trait
+\citep{Xu1996, Broman2003b}.  To handle possible marker genotyping
+errors at the causal loci, we took the observed genotypes to be those
+with maximal multipoint probability, provided that this exceeded 0.99;
+if no genotype had probability $>$ 0.99, the observed genotype was
+treated as missing.
+
+<<load_mlratios, echo=FALSE, results="hide">>=
+attach("Analysis/R/Rcache/mlratios.RData")
+@
+
+% Count the bad hypo arrays
+<<bad_hypo, echo=FALSE, results="hide">>=
+file <- "R/Rcache/n_bad_hypo.RData"
+if(file.exists(file)) {
+  load(file)
+} else {
+  n.bad.hypo <- sum(apply(hypo.mlratio, 1, function(a) median(a[!is.na(a) & a > -2 & a < 2]) > 0.016))
+  save(n.bad.hypo, file=file)
+}
+@
+
+\bigskip
+\noindent \textbf{\emph{eQTL analyses:}} We considered each of the six
+tissues individually, and focused on the subset of probes with known
+genomic location on an autosome or the X chromosome.  For
+hypothalamus tissue, we omitted a batch of \Sexpr{n.bad.hypo} poorly behaved arrays,
+though these had been included in our efforts to identify sample mix-ups.
+
+Expression measures were transformed to normal quantiles.  That is,
+the expression measures were converted to ranks $R_i \in \{1, \dots,
+n\}$ and then transformed to $y_i = \Phi^{-1}[(R_i - 0.5)/n]$, where
+$\Phi^{-1}$ is the inverse of the normal cumulative distribution
+function.
+
+QTL analysis was performed by Haley-Knott regressions with
+sex included as an interactive covariate.  We considered the maximal
+peak for each array probe on each chromosome, and inferred the
+presence of a QTL if the LOD score exceeded 5, a 5\% genome-wide
+significance level established by computer simulation.
+
+An inferred eQTL was considered a local-eQTL if the
+2-LOD support interval contained the genomic location of the
+corresponding array probe; otherwise, it was considered a
+\emph{trans}-eQTL.
+
+
+\bigskip
+\noindent \textbf{\sffamily Software}
+\nopagebreak
+
+All analyses were conducted with R \citep{R}.  QTL analyses were
+performed with the R package, R/qtl \citep{Broman2003a}.  Our methods
+for identifying sample mix-ups have been assembled as an R package,
+R/lineup, available at \url{http://github.com/kbroman/lineup} as well
+as The Comprehensive R Archive Network (CRAN;
+\url{http://cran.r-project.org}).
+
+
+\bigskip
+\noindent \textbf{\sffamily Data availability}
+\nopagebreak
+
+The genotype and gene expression microarray data are available at the
+QTL Archive, now part of the Mouse Phenome Database:
+
+\noindent
+\url{http://phenome.jax.org/db/q?rtn=projects/projdet&reqprojid=532}
+
+\clearpage
+
+\centerline{\sffamily \textbf{Results}}
+
+
+<<count_sexswaps, echo=FALSE, results="hide">>=
+attach("Analysis/OrigData/rawg.RData") # contains notfemale and notmale
+attach("Analysis/OrigData/clean_cross.RData") # contains notfemale and notmale
+necropsy <- read.csv("Analysis/FinalData/necropsy.csv", as.is=TRUE)
+sex <- sub("F", "Female", sub("M", "Male",necropsy$Sex))
+names(sex) <- necropsy$MouseNum
+
+rawg <- rawg["X", rawg$pheno$Strain == "F2"]
+rawg$pheno$Sex <- sex[as.character(rawg$pheno$MouseNum)] # fix sex
+
+mnr <- markernames(rawg)
+mnc <- markernames(f2g)
+rawg <- pull.markers(rawg, mnr[!is.na(match(mnr, mnc))])
+
+female <- (rawg$pheno$Sex=="Female")
+female.prob <- apply(rawg[,female]$geno$X$data, 1, function(a) sum(a==1, na.rm=TRUE))
+names(female.prob) <- as.character(rawg$pheno$MouseNum)[female]
+female.prob <- sort(female.prob[female.prob > 0])
+
+male <- (rawg$pheno$Sex=="Male")
+male.prob <- apply(rawg[,male]$geno$X$data, 1, function(a) sum(a==2, na.rm=TRUE))
+names(male.prob) <- as.character(rawg$pheno$MouseNum)[male]
+male.prob <- sort(male.prob[male.prob > 0])
+
+nRRfemale <- sum(apply(rawg[,female]$geno$X$data, 1, function(a) all(a[!is.na(a)]==3)))
+nRRmale <- sum(apply(rawg[,male]$geno$X$data, 1, function(a) all(a[!is.na(a)]==3)))
+@
+
+
+We first became aware of potential problems in the samples through the
+identification of six duplicate DNA samples and
+\Sexpr{length(female.prob) + sum(male.prob> 1)}~mice whose X
+chromosome genotypes were incompatible with their sex.
+We genotyped \Sexpr{nind(rawg)+3}~F$_2$ mice at
+\Sexpr{totmar(f2g)}~informative SNPs, including \Sexpr{nmar(f2g)["X"]}
+on the X chromosome.  Three samples were assigned ``no call'' at all
+markers and not considered further.  Six pairs were seen to be
+duplicates, with over 98\% genotype identity across typed markers
+(Table~S1).
+
+The F$_2$ mice were the offspring of F$_1$ siblings derived by
+crossing BTBR females to B6 males (Figure~S1).  F$_2$ females should
+be homozygous BTBR (RR) or heterozygous (BR) on the X chromosome;
+F$_2$ males should be hemizygous B or R.  (Note that homozygous and hemizygous
+genotypes could not be distinguished.)  However,
+\Sexpr{length(female.prob)}~females exhibited some homozygous B6
+genotypes on the X, and \Sexpr{length(male.prob)}~males exhibited some
+heterozygous genotypes (Figure~S2).  While four of these males had a
+single heterozygous genotype that was likely a genotyping error, the
+\Sexpr{length(female.prob)}~females and the other
+\Sexpr{sum(male.prob>1)}~males were clearly indicated to have swapped
+sex.  There were an additional \Sexpr{nRRfemale}~females and
+\Sexpr{nRRmale}~males with homozygous RR or hemizygous R genotypes for
+all markers on the X chromosome, compatible with either sex.
+
+In cleaning the genotype data, we omitted a set of
+seven samples, including one pair of the sample
+duplicates, with poorly behaved data.  (They showed a high rate of
+apparent genotyping errors, an unusually large proportion of
+homozygous genotypes, and an unusually large number of apparent
+crossovers.)  For the other five pairs of duplicates, we omitted one
+sample from each pair.
+
+
+
+\bigskip
+\noindent \textbf{\sffamily Sample mix-ups in the gene expression arrays}
+\nopagebreak
+
+% how many individuals have expression and genotype data?
+<<which_tissues, echo=FALSE, results="hide">>=
+tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
+mice <- sapply(tissues, function(a) rownames(get(paste.(a, "mlratio"))))
+allmice <- sort(unique(unlist(mice)))
+m <- sapply(mice, function(a,b) match(b, a), allmice)
+kidneyonly <- sum(!is.na(m[,5]) & rowSums(is.na(m[,-5]))==5)
+allbutkidney <- sum(is.na(m[,5]) & rowSums(!is.na(m[,-5]))==5)
+gnoe <- sum(is.na(match(rawg$pheno$MouseNum, allmice)))
+@
+
+For each of six tissues
+(adipose, gastroc, hypo, islet, kidney, liver),
+approximately 500~F$_2$ mice were assayed for gene expression with
+two-color Agilent arrays with tissue-specific pools (Table~S2).  A
+small number of poorly behaved arrays were omitted.  We later
+discovered a batch of \Sexpr{n.bad.hypo} poorly behaved arrays for
+hypo, but these were included in the analyses described here.
+There were \Sexpr{length(allmice)}~mice assayed for at least one of
+the six tissues,
+but not all mice were assayed for all tissues.
+In particular, there were \Sexpr{kidneyonly}~mice assayed only for
+gene expression in kidney, and \Sexpr{allbutkidney}~mice assayed for
+all tissues except kidney.  Further, \Sexpr{gnoe}~mice were genotyped
+but were not subject to gene expression analysis.
+
+
+<<example_all_vs_subset_probes, echo=FALSE, results="hide">>=
+attach("Analysis/R/Rcache/expr_corr.RData")
+cor.all <- cor(kidney.mlratio["Mouse3567",], liver.mlratio["Mouse3567",], use="complete")
+wh <- which(expr.corr[,"kl"] > 0.75)
+cor.sub <- cor(kidney.mlratio["Mouse3567",wh], liver.mlratio["Mouse3567",wh], use="complete")
+n.gt.0.75 <- apply(expr.corr, 2, function(a) sum(a > 0.75))
+@
+
+To identify potential sample mix-ups among gene expression arrays, we
+first identified, for each
+pair of tissues, a subset of array probes with high between-tissue
+correlations.  Consideration of all probes would greatly reduce the
+apparent correlation between arrays, due to the abundance of
+unexpressed genes.  For example, for Mouse3567, the correlation
+between gene expression in kidney and in liver, across all
+\Sexpr{ncol(kidney.mlratio) %/% 1000},\Sexpr{ncol(kidney.mlratio) %% 1000}
+probes, is \Sexpr{sprintf("%.2f", cor.all)}, while for the subset of
+\Sexpr{length(wh)}~probes with correlation $>$ 0.75 between kidney and
+liver, the correlation is \Sexpr{sprintf("%.2f", cor.sub)}.  (See Figure~S3.)
+
+Figure~S4 contains density estimates of the between-tissue
+correlations for all array probes.  The densities are organized by
+tissue, with the panel for each tissue containing the five tissue pairs
+involving that tissue.  There are some small differences among tissue
+pairs, but the vast majority of between-tissue correlations are between
+-0.25 and 0.50.  Table~S3 contains the numbers of probes for each pair
+of tissues with correlations exceeding 0.70, 0.75, 0.80, and 0.90,
+respectively.  We focused on probes with correlations $>$ 0.75, of
+which there were between \Sexpr{min(n.gt.0.75)} and
+\Sexpr{max(n.gt.0.75)} probes per tissue pair.
+
+For each pair of tissues, we calculated the correlations among
+samples across the subset of correlated probes.  For each tissue, we
+then summarized the similarity between each sample in that tissue and
+each sample in other tissues by the median correlations, across the
+tissue pairs that included the target tissue.
+
+Figure~S5 contains histograms of the similarity measures for each
+tissue, separating the self-self similarities (the diagonal elements)
+and the self-nonself similarities (the off-diagonal elements).  There
+are a number of clear outliers: small self-self similarities and large
+self-nonself similarities.  The self-nonself similarities follow a
+bimodal distribution, with the lower mode corresponding to
+opposite-sex pairs and the upper mode corresponding to same-sex
+pairs.  The chosen probes included a probe in \emph{Xist} (involved in
+X chromosome inactivation) and probes on the Y chromosome.
+
+To identify problem samples in each tissue, we considered for each
+sample, the self similarity vs.\ the maximum similarity (that is, the
+values on the diagonal of the similarity matrix and the maximum values
+in each row).  These are displayed in Figure~\ref{fig:eve_similarity}.
+
+%%%%%%%%%%%%%
+%% Figure 3
+\begin{figure}
+
+\centerline{\includegraphics[width=6.05in]{Figs/fig3.eps}}
+
+\vspace*{4mm}
+
+\caption{KWB_FIG3_LEGEND\label{fig:eve_similarity}}
+\end{figure}
+%%%%%%%%%%%%%
+
+The vast majority of samples in each tissue were indicated to be
+correctly labeled: the self similarity was the maximum similarity.
+But for each tissue, there were at least a few samples which were more
+like some other sample in the other tissues.  In each case, we infer
+the correct label to be that with the maximal similarity.  In
+Figure~S6, we display the second-highest similarity vs.\ the maximum
+similarity for each sample in each tissue.  The problem
+samples (colored green) are generally well away from the diagonal,
+indicating good support for our ability to infer the correct label.
+
+The red points in Figure~\ref{fig:eve_similarity} and Figure~S6 are
+special cases: The Mouse3188 sample is highlighted as a potential problem in both
+islet and gastroc (being slightly off the diagonal line), but this is
+because that sample was involved in array swaps in two different
+tissues (adipose and hypo).  This is the only sample indicated to be
+mislabeled in multiple tissues.  We also highlight Mouse3484 in
+gastroc, which appeared to be a mixture (more on this below).
+
+The inferred errors are displayed in Figure~\ref{fig:expr_swaps}.
+For adipose, we identified two problems.  The samples for Mouse3583
+and Mouse3584 were swapped, and there was a three-way swap among
+Mouse3187, Mouse3188, and Mouse3200, with the sample labeled Mouse3187
+really being Mouse3188, that labeled Mouse3188 really being Mouse3200,
+and that labeled Mouse3200 really being Mouse3187.
+
+%%%%%%%%%%%%%
+% Figure 4
+\begin{figure}
+
+\centerline{\includegraphics[width=\textwidth]{Figs/fig4.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG4_LEGEND\label{fig:expr_swaps}}
+\end{figure}
+%%%%%%%%%%%%%
+
+
+For gastroc, there was a single sample swap, between Mouse3655 and
+Mouse3659.  For hypo, there were 9 pairs of sample swaps.  For islet,
+the samples Mouse3598 and Mouse3599 were swapped, and the sample
+labeled Mouse3296 was really a duplicate (or \emph{unintended
+  technical replicate}) of the Mouse3295 sample.  For liver, the
+sample labeled Mouse3142 really corresponded to Mouse3143 (Mouse3142
+was not assayed for gene expression in liver), and the sample labeled
+Mouse3141 was really a duplicate of the Mouse3136 sample.
+
+For kidney, the samples for Mouse3510 and Mouse3523 were swapped, and
+Mouse3484 was also seen to be a problem.  We believe that the samples for
+Mouse3484 and Mouse3503 may have been mixed and assayed twice in
+duplicate (more below).  There were \Sexpr{kidneyonly}~samples that
+were assayed for gene expression only in kidney; for these, the self
+similarity cannot be calculated.  We have limited ability to detect
+mix-ups for these samples, but none were very close to any sample
+in other tissues, and so they can, at least provisionally, be assumed
+to be correctly labeled.
+
+To further illustrate the sample swaps, Figure~S7 contains scatter
+plots of the gastroc arrays labeled Mouse3655 and Mouse3659 against
+the arrays in the other tissues with those labels.  For each pair of
+tissues, we plot the array probes with between-tissue correlation $>$
+0.75.  Mouse3655 in gastroc is correlated with Mouse3659 in other
+tissues, while Mouse3659 in gastroc is correlated with Mouse3655 in
+other tissues, indicating a clear swap between these samples within
+gastroc.
+
+Figure~S8 contains similar scatter plots for a pair of inferred
+duplicates, with the sample labeled Mouse3141 in liver really being a
+duplicate of the Mouse3136 liver sample.  Mouse3136 liver and
+Mouse3141 liver are each correlated with Mouse3136 in other tissues
+and not with Mouse3141, and the two samples are extremely highly
+correlated with each other (see the two central panels in the bottom
+row).  In Figure~S9, we display the between-sample correlations for
+samples with these two labels, for all pairs of tissues, with the
+pairs including liver highlighted in red.  The Mouse3136 samples are
+correlated for all tissue pairs; the Mouse3141 samples are correlated
+for all tissue pairs not involving liver, and the Mouse3141 liver
+sample is correlated with all Mouse3136 samples in other tissues.
+
+The Mouse3484 and Mouse3503 samples in kidney appear to be sample
+duplicates, but these samples are correlated with each of Mouse3484
+and Mouse3503 in the other tissues.  We're inclined to believe that
+the two kidney samples were mixed and arrayed in duplicate, but we are
+not able to prove this point.  Figure~S10 contains scatter plots for
+the two samples in kidney vs.\ all tissues; the central panels in the
+second row from the bottom indicate that the two samples are highly
+correlated and so likely replicates, but all scatter plots here show
+strong correlation.  Figure~S11 contains the between-sample
+correlations for both sample labels in all tissue pairs; contrast this
+with Figure~S9, for the simple duplicate in liver.  Mouse3484 kidney
+and Mouse3503 kidney are strongly correlated with both samples in
+the other tissues, but not so strongly as Mouse3484 and Mouse3503 are
+with themselves in the non-kidney pairs.  And for tissue pairs not
+including kidney, Mouse3484 and Mouse3503 are much more weakly
+correlated.
+
+As we were unable to resolve the problems with Mouse3484 and Mouse3503
+in kidney, these two arrays were omitted from later analyses.  The two
+simple sample duplicates, one in islet and one in liver, were combined
+and assigned the correct label.  The other sample mix-ups were
+relabeled as inferred in Figure~\ref{fig:expr_swaps}.
+
+Expression of the \emph{Xist\/} gene (involved in X chromosome inactivation and
+so highly expressed in females but not males) and of genes on the Y
+chromosome is a useful diagnostic for the sex of an mRNA sample.  In
+Figure~S12, we display, for each tissue, the average expression across
+for Y chromosome genes vs.\ the expression of \emph{Xist}, with the original
+data and after correction of the sample mix-ups in the expression
+arrays.  Just three of the sample-swaps (one in gastroc and two in
+hypo) involved opposite-sex pairs.  These show up clearly in the left
+column, with the original data, and are resolved after correction of
+the sample mix-ups.  The unusual pattern of expression in hypo,
+with a bimodal distribution for the Y chromosome genes in males and a
+large number of females with relatively low \emph{Xist\/} expression,
+was due to a set of \Sexpr{n.bad.hypo} poorly behaved arrays.
+
+
+\bigskip
+\noindent \textbf{\sffamily Sample mix-ups in the genotypes}
+\nopagebreak
+
+<<probes_with_locations, echo=FALSE, results="hide">>=
+attach("Analysis/OrigData/annot.amit_rev.RData")
+nauto.probes.w.loc <- sum(!is.na(match(annot$chr, 1:19)))
+tot.probes.w.loc <- sum(!is.na(match(annot$chr, c(1:19,"X"))))
+@
+
+Having corrected the sample mix-ups among the gene expression arrays,
+we turned to potential problems in the genotypes.  For each tissue,
+we considered the \Sexpr{nauto.probes.w.loc %/% 1000},\Sexpr{nauto.probes.w.loc %% 1000}
+autosomal array probes with known genomic location and identified
+those with a strong local-eQTL, having LOD score $>$ 100 for
+the association between the probe expression measures and
+genotype at the corresponding location.
+
+For each such probe, we created a $k$-nearest neighbor classifier (with
+k=40), for predicting eQTL genotype from the expression phenotype.
+For example, in Figure~\ref{fig:gve}, we display the expression, in
+islet, of probe 499541 (on
+chromosome~\Sexpr{annot$chr[annot$a_gene_id=="499541"]}) vs.\ genotype
+at the nearest marker.  At this probe, there are three clear groups of
+mice, with B6 homozygotes B6 (BB) having high expression, BTBR
+homozygotes (RR) having low expression, and heterozygotes (BR)
+intermediate.  There are a number of mice whose expression does not
+match their observed eQTL genotype; the classifier infers a different
+eQTL genotype.  The points highlighted in pink have expression at the
+boundary between the BB and BR groups and are left unassigned.  (To
+assign an inferred eQTL genotype to a point, we required that 80\% of
+the nearest neighbors had a common eQTL genotype.)
+
+%%%%%%%%%%%%%
+%% Figure 5
+\begin{figure}
+
+\centerline{\includegraphics[width=\textwidth]{Figs/fig5.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG5_LEGEND\label{fig:gve}}
+\end{figure}
+%%%%%%%%%%%%%
+
+For sets of probes mapping to approximately the same genomic location,
+we considered the probes' expression jointly.  Examples of pairs of
+probes mapping to the same location are shown in Figure~S13, with
+points colored by observed eQTL genotype.
+
+We considered \Sexpr{min(neqtl)}--\Sexpr{max(neqtl)} eQTL per tissue;
+their locations on the genetic map of markers is shown in Figure~S14.
+The majority of eQTL had a single corresponding probe.  There were
+\Sexpr{min(twoprobes)}--\Sexpr{max(twoprobes)} eQTL per tissue with a
+pair of corresponding probes.  For islet, there were
+\Sexpr{numberastext(threeprobes[4])} eQTL with three corresponding probes, and for
+adipose there was \Sexpr{numberastext(threeprobes[1])} such trio.
+
+For each tissue, we calculated the proportion of matches between
+the observed eQTL genotypes for each DNA sample and the inferred eQTL
+genotypes from each mRNA sample, as a measure of similarity between
+the DNA and mRNA samples.  We further calculated a combined measure of
+similarity as the overall proportion of mismatches, pooling all six
+tissues.
+
+Figure~S15 contains histograms of the similarity measures for each
+tissue, separating the self-self similarities (the diagonal elements)
+and the self-nonself similarities (the off-diagonal elements).  There
+are a number of clear outliers: small self-self similarities and large
+self-nonself similarities.
+
+To identify problem
+DNA samples,  we again considered the self similarity
+vs.\ the maximum similarity (that is, the values on the
+diagonal of the similarity matrix vs. the maximum values in each
+row).  Figure~\ref{fig:gve_similarity} contains a scatterplot of these
+values.  Gray points, with maximum similarity equal to the self
+similarity, are inferred to be corrected labeled.  Green points, with
+small self similarity but large maximum similarity, are inferred to be
+incorrect, but are fixable.  Red points concern DNA samples for which no
+corresponding mRNA sample can be found.
+
+%%%%%%%%%%%%%
+%% Figure 6
+\begin{figure}
+
+\centerline{\includegraphics[width=\textwidth]{Figs/fig6.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG6_LEGEND\label{fig:gve_similarity}}
+
+\end{figure}
+%%%%%%%%%%%%%
+
+Detailed results for the six tissues, with tissue-specific similarity
+values, are shown in Figure~S16.  The points are colored as in
+Figure~\ref{fig:gve_similarity}, based on the combined similarity
+measure.  The points with missing self similarity (at the bottom of
+each panel) were not intended to be assayed for gene expression in
+that tissue.  The tissue-specific results are concordant with the overall
+conclusions, with two caveats.  First, there are a number of green
+points (corresponding to mislabeled, but fixable, DNA samples), with
+low maximum similarity in each tissue.  These correspond to samples
+for which gene expression assays were not performed for that
+tissue, the bulk of which are for the \Sexpr{kidneyonly} samples that
+were assayed only for gene expression in kidney and the
+\Sexpr{allbutkidney} samples that were assayed for all tissues except
+kidney.  Second, for hypo, the strength of eQTL associations were
+weaker, and fewer eQTL were considered, than for the other tissues,
+and so there is less separation between the green and pink points.
+
+In Figure~S17, we display the second-highest similarity vs.\ the
+maximum similarity, for the combined similarity measures accounting
+for all tissues.  The fixable mis-labeled samples (in green) are all
+well away from the diagonal, indicating good support for our ability
+to infer the correct label.
+
+The inferred mix-ups among the DNA samples are displayed in
+Figure~\ref{fig:genotype_plates} according to the arrangement of the
+samples on the 96-well genotyping plates.  Black dots indicate that
+the correct DNA sample was placed in the correct well.  The blue arrows point
+from the well in which a DNA sample was supposed to be placed, to the
+well where it was actually placed.
+For example, on plate 1631, the sample in well D02 was placed in the
+correct well but was also placed in well B03.  The sample that
+belonged in B03 was placed in B04, the sample that belonged in
+B04 was placed in E03, and the sample belonging in E03 was not found
+(but, as indicated by the green arrowhead, there was no corresponding gene
+expression data).
+
+%%%%%%%%%%%%%
+%% Figure 7
+\begin{figure}
+
+\vspace*{-0.25in}
+
+\centerline{\includegraphics[width=5.83in]{Figs/fig7.eps}}
+
+\vspace*{4mm}
+
+\caption{\footnotesize KWB_FIG7_LEGEND \label{fig:genotype_plates}}
+
+\end{figure}
+%%%%%%%%%%%%%
+
+
+While there were many long-range sample swaps, particularly for
+samples belonging in the eleventh column of plate 1629, the bulk of
+the errors occurred on plates 1632 and 1630, with a long series of
+off-by-one and off-by-two errors indicative of single-channel
+pipetting mistakes.
+
+Let us describe a small portion of the further errors.
+On plate 1632, the sample belonging in well E07 was placed in
+the correct well but was also placed in the well below, F07.  The
+sample belonging in well F07 was not found but had no corresponding
+gene expression data.  The sample placed in well G07 was incorrect but
+had no corresponding gene expression data, and so presumably
+corresponds to that which should have been in the well above, F07.
+The sample belonging in well G07 was placed one below, H07.  There are
+then a series of off-by-one errors, except that the sample belonging
+in well C09 was actually placed in well G01, while the sample
+belonging in well D09 was placed in both well E01 and on plate 1629
+(well C11).
+
+<<load_calls, echo=FALSE, results="hide">>=
+attach("Analysis/R/calls.RData")
+tot.dna <- nrow(calls)
+omit <- grep("^omit", calls[,7])
+correct <- which(calls[,7] == rownames(calls))
+maybe <- grep("^maybe", calls[,7])
+not <- grep("^not", calls[,7])
+dup <- grep("^dup", calls[,7])
+g <- grep("^Mouse", calls[,7])
+fixable <- g[calls[g,7] != rownames(calls)[g]]
+
+tmp <- c(omit, correct, maybe, not, dup, fixable)
+
+n.omit <- length(omit)
+n.correct <- length(correct)
+n.maybe <- length(maybe)
+n.not <- length(not)
+n.dup <- length(dup)
+n.fixable <- length(fixable)
+@
+
+Of the \Sexpr{tot.dna} DNA samples that were genotyped, \Sexpr{n.omit}
+were omitted due to poorly behaved genotypes (including a pair of
+replicates), \Sexpr{n.correct} were found to be correctly labeled, and
+\Sexpr{n.maybe} were possibly correct but could not be verified due
+to lack of gene expression assays.  However, \Sexpr{n.dup} samples
+were duplicates of other samples, \Sexpr{n.fixable} were incorrectly
+labeled but the correct label could be assigned, and \Sexpr{n.not}
+were incorrectly labeled and the correct label could not be
+identified.  Thus, at least
+\Sexpr{round((n.fixable + n.not + n.dup)/(tot.dna)*100)}\%
+of the samples were involved in sample mix-ups.
+
+
+We had initially become suspicious of possible sample mix-ups through
+the identification of \Sexpr{length(female.prob) + sum(male.prob > 0)}~mice
+whose X chromosome genotypes were inconsistent with their sex.  After
+correction of the sample mix-ups, there were no such discrepancies.
+Only a small portion of the problems were identified through such
+sex/genotype incompatibilities, because the majority of sample mix-ups
+were off-by-one errors in the genotype plates, and the samples were
+arranged on the plates so that adjacent samples were often the same
+sex.
+
+The large discrepancies between expression and eQTL genotype seen in
+Figure~5 and Figure~S13 are largely eliminated following correction of
+the inferred sample mix-ups. Figure~S18 shows the same examples, but
+with the corrected data. Panels A-D of Figure~S18 correspond to the
+panels in Figure~S13; the genotypes are now more clearly separated,
+though some overlap remains and there are a few outliers (most
+notably, in Figure~S18B). Panel E of Figure~S18 corresponds to
+Figure~5; following correction of the sample mix-ups, there is no
+overlap between the three genotype groups.
+
+\bigskip
+\noindent \textbf{\sffamily QTL mapping results}
+\nopagebreak
+
+It should come as no surprise that the correction of the sample
+mix-ups, particularly the
+\Sexpr{round((n.fixable + n.not + n.dup)/(tot.dna)*100)}\%
+mix-ups in the DNA samples, leads to great improvement in QTL mapping
+results.  Figure~\ref{fig:insulin_lod} contains LOD curves for
+10~week insulin level with the original and corrected datasets.
+With the original data, four chromosomes had LOD score $>$ 4; after
+correction of the sample mix-ups, nine chromosomes have LOD score $>$
+4.
+
+%%%%%%%%%%%%%
+%% figure 8
+\begin{figure}
+
+\centerline{\includegraphics[width=\textwidth]{Figs/fig8.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG8_LEGEND\label{fig:insulin_lod}}
+\end{figure}
+%%%%%%%%%%%%%
+
+
+<<load_coat_color.RData, echo=FALSE, results="hide">>=
+attach("Analysis/R/Rcache/agouti_scan.RData")
+attach("Analysis/R/Rcache/tufted_scan.RData")
+attach("Analysis/R/Rcache/agouti_tab.RData")
+agouti.prob.n <- tab.n[1,1] + sum(tab.n[2:3,2])
+agouti.prob.o <- tab.o[1,1] + sum(tab.o[2:3,2])
+attach("Analysis/R/Rcache/tufted_tab.RData")
+tufted.prob.n <- tab.n[3,1] + sum(tab.n[1:2,2])
+tufted.prob.o <- tab.o[3,1] + sum(tab.o[1:2,2])
+@
+
+Two coat-related traits were recorded for the F$_2$ mice: agouti and
+tufted coats.  Concerning agouti coat: BTBR mice have tan coats, while
+B6 mice are black; this is due to a gene on chromosome 2, and the BTBR
+allele is dominant.  Mapping the agouti coat color as a binary
+phenotype, the LOD score on chromosome 2 increased from
+\Sexpr{round(max(out.agouti.o[,3]))} to
+\Sexpr{round(max(out.agouti.n[,3]))} after correction of the sample
+mix-ups (Figure~S19A).  While the corrected data still contained
+inconsistencies between genotype and coat color, the number of
+inconsistencies decreased from \Sexpr{agouti.prob.o} to
+\Sexpr{agouti.prob.n} (Table~S4).
+
+Tufted coat is due to a single gene on chromosome 17, with the BTBR
+allele (with the tufted phenotype) being recessive to the B6 allele
+(not tufted).  Mapping this phenotype as a binary trait, the LOD score
+on chromosome 17 increased from \Sexpr{round(max(out.tufted.o[,3]))} to
+\Sexpr{round(max(out.tufted.n[,3]))} after correction of the sample
+mix-ups (Figure~S19B).  While, as with agouti, the corrected data still contained
+inconsistencies between genotype and phenotype, the number of
+inconsistencies decreased from \Sexpr{tufted.prob.o} to
+\Sexpr{tufted.prob.n} (Table~S5).
+
+<<load_qtl_counts, echo=FALSE, results="hide">>=
+attach("Analysis/R/Rcache/neqtl_new.RData")
+attach("Analysis/R/Rcache/neqtl_old.RData")
+neqtl.old <- t(sapply(neqtl.old, colSums))
+neqtl.new <- t(sapply(neqtl.new, colSums))
+overall <- round(((colSums(neqtl.new) / colSums(neqtl.old))-1)*100)
+bytissue <- round(((neqtl.new / neqtl.old)-1)*100)
+@
+
+Finally the corrected data resulted in a great increase in the numbers
+of inferred eQTL in the six tissues (Figure~\ref{fig:eqtl_counts}).
+For each array probe with know genomic position, we performed a genome
+scan, including sex as an interactive covariate (that is, allowing the
+QTL effect to be different in the two sexes).  For each array probe,
+we counted the number of chromosomes have a peak LOD score above 5.
+Such a peak, on the chromosome containing the probe, was considered a
+local-eQTL if the 2-LOD support interval contained the probe location;
+other peaks were called \emph{trans}-eQTL.  The inferred number of
+local-eQTL increased by \Sexpr{overall[1]}\% across tissues (with a
+somewhat smaller increase in hypo).  The inferred number of
+\emph{trans}-eQTL increased by \Sexpr{overall[2]}\% across tissues
+(though only by \Sexpr{bytissue["hypo",2]}\% in hypo).  The modest
+increases in hypo were due in part to the omission of \Sexpr{n.bad.hypo} poorly
+behaved arrays. The increased numbers of inferred eQTL is also seen
+with more stringent thresholds; the numbers of eQTL with LOD $\ge$
+10 are shown in Figure~S20.
+
+%%%%%%%%%%%%%
+%% Figure 9
+\begin{figure}
+
+\centerline{\includegraphics[width=\textwidth]{Figs/fig9.eps}}
+
+\vspace{1cm}
+
+\caption{KWB_FIG9_LEGEND\label{fig:eqtl_counts}}
+\end{figure}
+%%%%%%%%%%%%%
+
+
+\clearpage
+\centerline{\sffamily \textbf{Discussion}}
+
+In a mouse intercross with over 500 animals and gene expression
+microarray data on six tissues, we identified and corrected sample
+mix-ups involving 18\% of the DNAs, along with a small number of mix-ups in
+each batch of expression arrays.  The QTL mapping results improved
+markedly following the correction of mix-ups, but it was perhaps most
+surprising just how strong the results were prior to the corrections.
+
+To align the expression arrays, we first identified subsets of genes
+with strong between-tissue correlation in expression, and then
+considered the correlations between samples across these subsets of
+genes.  To align genotypes and expression arrays, we identified
+transcripts with strong local-eQTL, formed predictors
+of eQTL genotype from expression values, and
+calculated the proportion of matches between the observed eQTL
+genotypes for a DNA sample and the predicted eQTL genotypes for an
+mRNA sample.
+
+This approach applies quite generally: Whenever one has two data
+matrices, $X$ and $Y$, whose rows should correspond, one should check that the rows
+do in fact correspond.  The simplest approach is to first identify
+subsets of associated columns (in which a column of $X$ is associated
+with a column of $Y$) and then calculate some measure of similarity
+between rows of $X$ and rows of $Y$, across that subset of columns.
+
+Similar approaches have been described by a number of groups.
+\citet{Westra2011} considered a number of public
+datasets and found an overall rate of 3\% sample mix-ups, with one
+dataset \citep{Choy2008} having 23\% mix-ups.
+\citet{Schadt2012} showed that, with the tight connection between
+genotypes and gene expression phenotypes, external eQTL information
+can, in principle, be used to identify individuals participating in a
+gene expression study: Genome-wide gene expression is just as
+revealing of individual identities as genome-wide genotype data.
+\citet{Lynch2012} highlighted issues arising in large tumor studies
+and focused particularly on a number of experimental design issues,
+such as plate layout.  \citet{Ekstrom2012} considered the
+identification of sample mix-ups in genome-wide association studies,
+focusing on a small number of phenotypes, such as blood group data,
+with strong genotype-phenotype associations.
+Also relevant is the forensic bioinformatics work of
+\citet{Baggerly2008, Baggerly2009}, particularly
+their efforts to correct mix-ups in data files.
+Finally, \citet{Jun2012} recently described methods for detecting
+mixtures in DNA samples based on genotype or sequencing data,
+and there is considerable work on detecting mislabeled microarrays
+\citep[e.g.,][]{Zhang2009, Bootkrajang2013}.
+
+There are a number of opportunities for improvement in our approach.
+In particular, a number of critical parameters (such as the LOD score
+for choosing eQTL, and the number of nearest neighbors and the minimum
+vote in the $k$-nearest neighbor
+classifier) were chosen in an \emph{ad hoc\/} way.  The choice of such
+parameters influences the variation within and the separation between the
+self-self and self-nonself distributions of similarity measures, and
+thus our ability to identify errors.  In addition, other
+classification methods might be used, though the $k$-nearest neighbor
+classifier has an important advantage: It works well even in the
+presence of mis-classification error in the ``training'' data.
+
+Perhaps the most important lesson from this work is the value of
+investigating aberrations.  One should follow up any observed
+inconsistencies in data, to identify the source.  In particular,
+one should not rely solely on LOD scores or other summary statistics,
+but also inspect plots of genotype versus phenotype, such as that
+in Figure~\ref{fig:gve}.
+
+Of course, there are many possible errors that we couldn't see by
+these approaches.  For example, all of the tissues (including the DNA)
+for a pair of animals might be swapped, or there may be mix-ups within
+the clinical phenotypes (such as plasma insulin levels).  And some
+mix-ups are detectable but not correctable.
+
+We have not identified any between-tissue mix-ups in the expression
+data, but such errors are possible.  For that type of error, it may be
+useful to consider the gene expression bar code developed by
+\citet{Zilliox2007}.
+
+The correction of inferred sample mix-ups, as we have done, may
+introduce bias towards larger estimated eQTL effects.  We believe
+that, in the current study, there is little risk of such bias, as the
+data provide strong evidence for specific sample labels.  If the
+correction of sample mix-ups were accompanied by a higher level of
+uncertainty, one might consider omitting samples rather than assigning
+the inferred labels, though such an approach could also incur some
+bias.
+
+Finally, one might ask, following these findings: What is an
+acceptable error rate in a research study?  And what laboratory
+procedures should be instituted to avoid such errors? There exist
+procedures to help protect against errors, both for genotypes
+\citep[e.g.,][]{Huijsmans2007a, Huijsmans2007b} and for microarrays
+\citep{Grant2003, Imbeaud2005, Walter2010}, but they are not always
+put into practice.  However, as the current study indicates, with
+expression genetic data, one can accommodate a high rate of errors
+provided that one applies appropriate procedures to detect and correct
+such errors.
+
+
+
+
+
+\clearpage
+\centerline{\sffamily \textbf{Acknowledgments}}
+
+The authors thank Angie Oler, Mary Rabaglia, Kathryn Schueler, and
+Donald Stapleton for their work on the underlying project, and Amit
+Kulkarni for providing annotation information for the expression
+microarrays.
+This work was supported in part by
+National Institutes of Health grants GM074244 (to K.W.B.) and
+DK066369 (to A.D.A).
+
+
+
+\clearpage
+\bibliographystyle{genetics}
+\renewcommand*{\refname}{\centerline{\normalsize\sffamily \textbf{Literature Cited}}}
+\bibliography{samplemixups}
+
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
