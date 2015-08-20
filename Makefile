@@ -1,5 +1,5 @@
 ### lists of figs, supp figs and supp table files
-figs = Figs/fig1.pdf Figs/fig2.pdf Figs/fig3.eps Figs/fig4.eps Figs/fig5.eps Figs/fig6.eps Figs/fig7.eps Figs/fig8.eps Figs/fig9.eps
+figs = Figs/fig1.eps Figs/fig2.eps Figs/fig3.eps Figs/fig4.eps Figs/fig5.eps Figs/fig6.eps Figs/fig7.eps Figs/fig8.eps Figs/fig9.eps
 
 suppfigs = SuppFigs/figS1.eps SuppFigs/figS2.eps SuppFigs/figS3.jpg SuppFigs/figS4.eps SuppFigs/figS5.eps SuppFigs/figS6.eps SuppFigs/figS7.eps SuppFigs/figS8.eps SuppFigs/figS9.eps SuppFigs/figS10.eps SuppFigs/figS11.eps SuppFigs/figS12.eps SuppFigs/figS13.eps SuppFigs/figS14.eps SuppFigs/figS15.eps SuppFigs/figS16.eps SuppFigs/figS17.eps SuppFigs/figS18.eps SuppFigs/figS19.eps SuppFigs/figS20.eps
 
@@ -58,10 +58,10 @@ SuppTables/tableS5.tex: SuppTables/tableS5.Rnw Analysis/R/Rcache/tufted_tab.RDat
 	cd SuppTables;Rscript -e 'library(knitr); knit("tableS5.Rnw")'
 
 ### figures
-Figs/fig1.pdf: R/eve_scheme.R Analysis/OrigData/F2.mlratio.kidney.RData Analysis/OrigData/F2.mlratio.liver.RData Analysis/R/Rcache/expr_corr.RData Analysis/R/Rcache/expr_corr_betw_tissues.RData
+Figs/fig1.eps: R/eve_scheme.R Analysis/OrigData/F2.mlratio.kidney.RData Analysis/OrigData/F2.mlratio.liver.RData Analysis/R/Rcache/expr_corr.RData Analysis/R/Rcache/expr_corr_betw_tissues.RData
 	cd R;R CMD BATCH --no-save eve_scheme.R
 
-Figs/fig2.pdf: R/gve_scheme.R Analysis/R/Rcache/dgve.RData
+Figs/fig2.eps: R/gve_scheme.R Analysis/R/Rcache/dgve.RData
 	cd R;R CMD BATCH --no-save gve_scheme.R
 
 Figs/fig3.eps: R/eve_similarity.R Analysis/R/Rcache/expr_mixup_summaries.RData
