@@ -7,3 +7,6 @@ Analysis/OrigData/*.RData
 Analysis/FinalData/*.csv
 Analysis/FinalData/*.RData
 SuppTables/*.tex
+samplemixups.pdf
+samplemixups_supp.pdf
+samplemixups_wsupp.pdf
