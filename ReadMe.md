@@ -7,6 +7,10 @@ The full manuscript (with supplementary tables and figures) is
 The paper will appear at [G3](http://g3journal.org/content/early/2015/08/19/g3.115.019778.abstract),
 and is also available at [arXiv](http://arxiv.org/abs/1402.2633).
 
+**I'm still working out how to include the data, or links to the data
+  (because they're _really_ big).
+  At the moment, this isn't fully reproducible.**
+
 The primary manuscript files are `samplemixups_nolegends.Rnw`
 and `samplemixups_supp_nolegends.tex`.
 
