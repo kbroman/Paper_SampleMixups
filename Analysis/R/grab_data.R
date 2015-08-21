@@ -2,6 +2,7 @@
 # and put it in the form needed for this repository
 
 library(data.table)
+library(qtl)
 
 mpd_url <- "http://phenome.jax.org/grpdoc_qtla/attie_2015"
 raw_zipfile <- "Attie_2015_eqtl_raw.zip"
@@ -68,5 +69,24 @@ cat(" -Unzipping clean data\n")
 unzipped_files <- utils::unzip(clean_path, exdir=dir)
 
 # copy annotation file
-annot <- fread(file.path(dir, "microarray_annot.csv"), data.table=FALSE)
+annot <- fread(file.path(dir, "Clean", "microarray_annot.csv"), data.table=FALSE)
 save(annot, file=file.path("..", "OrigData", "annot.amit_rev.RData"))
+
+# clean genotype data
+f2g <- read.cross("csv", file.path(dir, "Clean"), "genotypes_clean.csv",
+                  genotypes=c("BB", "BR", "RR"), alleles=c("B", "R"))
+f2g$geno <- x$geno[c(1:19, "X")]
+
+# genetic and physical maps
+gmap <- myfread(file.path(dir, "Clean", "markers_genetic_map.csv"))
+pmap <- myfread(file.path(dir, "Clean", "markers_physical_map.csv"))
+mnames <- split(rownames(pmap), factor(pmap$chr, levels=c(1:19,"X")))
+gmap <- split(gmap$pos, factor(gmap$chr, levels=c(1:19,"X")))
+pmap <- split(pmap$pos, factor(pmap$chr, levels=c(1:19,"X")))
+for(i in seq(along=gmap)) {
+    names(gmap[[i]]) <- mnames[[i]]
+    names(pmap[[i]]) <- mnames[[i]]
+}
+
+# save genotypes + physical map
+save(f2g, pmap, file=file.path("..", "FinalData", "aligned_geno_with_pmap.RData"))
