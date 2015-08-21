@@ -10,6 +10,7 @@ This directory contains R code to create the figures and supplementary figures.
 - Fig 8: [`insulin_lod.R`](insulin_lod.R)
 - Fig 9: [`eqtl_counts.R`](eqtl_counts.R)
 
+
 - Fig S1: [`xchr_fig.R`](xchr_fig.R)
 - Fig S2: [`sex_vs_X.R`](sex_vs_X.R)
 - Fig S3: [`expr_scatterplot_allprobes.R`](expr_scatterplot_allprobes.R)
@@ -31,7 +32,9 @@ This directory contains R code to create the figures and supplementary figures.
 - Fig S19: [`coatcolor_lod.R`](coatcolor_lod.R)
 - Fig S20: [`eqtl_counts_10.R`](eqtl_counts_10.R)
 
+
 - Proposed cover figure: [`cover_fig.R`](cover_fig.R)
+
 
 Other files:
 
