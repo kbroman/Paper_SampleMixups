@@ -53,6 +53,3 @@ Cached intermediate results are available at figshare:
   of the scripts (including creating mlratios.RData and mlratios_revised.RData)
 
 - Do clean tests, with and without the intermediate files
-
-- R code for figures and supp'l figs: in ReadMes, explain which file
-  is for what
