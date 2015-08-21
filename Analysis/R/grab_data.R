@@ -7,6 +7,7 @@ library(qtl)
 mpd_url <- "http://phenome.jax.org/grpdoc_qtla/attie_2015"
 raw_zipfile <- "Attie_2015_eqtl_raw.zip"
 clean_zipfile <- "Attie_2015_eqtl_clean.zip"
+tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
 
 # temporary directory
 dir <- tempdir()
@@ -32,7 +33,6 @@ myfread <-
 
 # reorg microarray data
 cat(" -Reading and saving mlratios\n")
-tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
 for(tissue in tissues) {
     cat(" ---Reading and saving", tissue, "\n")
     obj <- paste0(tissue, ".mlratio")
@@ -40,6 +40,16 @@ for(tissue in tissues) {
            t(myfread(file.path(dir, "Raw", paste0(tissue, "_mlratio_raw.csv")))))
     save(list=obj, file=file.path("..", "OrigData", paste0("F2.mlratio.", tissue, ".RData")))
 }
+
+# drop some arrays and save in mlratios.RData
+omit <- read.csv("omitted_samples.csv", as.is=TRUE)
+omit <- omit[omit$Tissue != "DNA",]
+omit <- omit[-grep("duplicates", omit$Note),]
+for(tissue in tissues) {
+    obj <- paste0(tissue, ".mlratio")
+    assign(obj, get(obj)[is.na(match(rownames(get(obj)), omit$MouseNum[omit$Tissue==tissue])),])
+}
+save(list=paste0(tissues, ".mlratio"), file.path("Rcache", "mlratios.RData"))
 
 # read very raw genotypes and make some slight changes
 suppressWarnings(rawg <- read.cross("csv", file.path(dir, "Raw"), "genotypes_veryraw.csv",
@@ -67,6 +77,16 @@ utils::download.file(paste0(mpd_url, "/", clean_zipfile), clean_path)
 # unzip
 cat(" -Unzipping clean data\n")
 unzipped_files <- utils::unzip(clean_path, exdir=dir)
+
+# reorg microarray data
+cat(" -Reading and saving mlratios\n")
+for(tissue in tissues) {
+    cat(" ---Reading and saving", tissue, "\n")
+    obj <- paste0(tissue, ".mlratio")
+    assign(obj,
+           myfread(file.path(dir, "Clean", paste0(tissue, "_mlratio_clean.csv"))))
+    save(list=obj, file=file.path("..", "FinalData", paste0(tissue, "_mlratio_final.RData")))
+}
 
 # copy annotation file
 annot <- fread(file.path(dir, "Clean", "microarray_annot.csv"), data.table=FALSE)
