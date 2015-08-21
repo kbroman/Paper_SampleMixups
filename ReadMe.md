@@ -51,8 +51,6 @@ Cached intermediate results are available at figshare:
 - Finalize R script that grabs data from MPD and convert to form needed for rest
   of the scripts (including creating mlratios.RData and mlratios_revised.RData)
 
-- Seem to rely on old annotations in some bits; fix this
-
 - Do clean tests, with and without the intermediate files
 
 - R code for figures and supp'l figs: in ReadMes, explain which file
