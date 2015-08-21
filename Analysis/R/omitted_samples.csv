@@ -1,0 +1,23 @@
+MouseNum,Tissue,Note,PlatePos
+Mouse3377,DNA,blank,SMP4_0001630:C04
+Mouse3338,DNA,blank,SMP4_0001632:B10
+Mouse3265,DNA,blank,SMP4_0001632:A01
+Mouse3258,DNA,bad genotypes
+Mouse3268,DNA,bad genotypes
+Mouse3292,DNA,bad genotypes
+Mouse3267,DNA,bad genotypes
+Mouse3288,DNA,bad genotypes
+Mouse3362,DNA,bad genotypes
+Mouse3322,DNA,bad genotypes
+Mouse3176,adipose,distant from other arrays
+Mouse3243,adipose,distant from other arrays
+Mouse3463,adipose,distant from other arrays
+Mouse3521,adipose,distant from other arrays
+Mouse3463,gastroc,13889 missing values
+Mouse3538,gastroc,distant from other arrays
+Mouse3535,hypo,negative correlation with other tissues; lots of extreme values
+Mouse3317,islet,distant from other arrays; mlratio has very heavy tails
+Mouse3055,kidney,quite low self-self correlation
+Mouse3484,kidney,3484 & 3503 are duplicates; but not sure of which
+Mouse3503,kidney,3484 & 3503 are duplicates; but not sure of which
+Mouse3144,liver,distant from other arrays; mlratio has odd marginal distribution
