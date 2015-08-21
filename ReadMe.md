@@ -42,7 +42,8 @@ Cached intermediate results are available at figshare:
 - Perl
 - Python 2.7
 - [Asciidoc](http://www.methods.co.nz/asciidoc/)
-- R packages: knitr, qtl, broman, lineup, ascii, data.table
+- R packages: knitr, qtl, broman, lineup, ascii, data.table, igraph,
+  beeswarm, RColorBrewer
 
 ---
 
