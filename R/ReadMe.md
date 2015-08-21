@@ -1,5 +1,7 @@
 This directory contains R code to create the figures and supplementary figures.
 
+The main figures:
+
 - Fig 1: [`eve_scheme.R`](eve_scheme.R)
 - Fig 2: [`gve_scheme.R`](gve_scheme.R)
 - Fig 3: [`eve_similarity.R`](eve_similarity.R)
@@ -10,6 +12,7 @@ This directory contains R code to create the figures and supplementary figures.
 - Fig 8: [`insulin_lod.R`](insulin_lod.R)
 - Fig 9: [`eqtl_counts.R`](eqtl_counts.R)
 
+The supplemental figures:
 
 - Fig S1: [`xchr_fig.R`](xchr_fig.R)
 - Fig S2: [`sex_vs_X.R`](sex_vs_X.R)
@@ -33,7 +36,7 @@ This directory contains R code to create the figures and supplementary figures.
 - Fig S20: [`eqtl_counts_10.R`](eqtl_counts_10.R)
 
 
-- Proposed cover figure: [`cover_fig.R`](cover_fig.R)
+A proposed cover figure for [G3](http://g3journal.org/): [`cover_fig.R`](cover_fig.R)
 
 
 Other files:
