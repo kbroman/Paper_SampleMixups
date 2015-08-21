@@ -4,7 +4,6 @@ SuppFigs/*.pdf
 *.Rout
 ProcessedFiles/
 Analysis/OrigData/*.RData
-Analysis/FinalData/*.csv
 Analysis/FinalData/*.RData
 SuppTables/*.tex
 samplemixups.pdf
