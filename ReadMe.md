@@ -30,6 +30,10 @@ The `Analysis/R` subdirectory has an
 [asciidoc](http://www.methods.co.nz/asciidoc/) file for the analyses
 in the work. That directory has its own `Makefile`.
 
+Cached intermediate results are available at figshare:
+[`samplemixups_rcache.zip`](http://files.figshare.com/2219404/samplemixups_rcache.zip) <br/>
+This contains a bunch of `.RData` files that go in `Analysis/R/Rcache`.
+
 ---
 
 ## To Do
