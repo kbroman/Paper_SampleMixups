@@ -7,6 +7,24 @@ supptabs = SuppTables/tableS1.tex SuppTables/tableS2.tex SuppTables/tableS3.tex 
 
 all: pdf Figs/cover.tiff
 
+
+### zip files with cached data
+zip: samplemixups_rcache.zip
+
+samplemixups_rcache.zip: Analysis/R/Rcache/agouti_scan.RData Analysis/R/Rcache/agouti_tab.RData \
+						 Analysis/R/Rcache/comparegeno.RData Analysis/R/Rcache/dgve.RData \
+						 Analysis/R/Rcache/dgve_min_and_self.RData Analysis/R/Rcache/dnadup.RData \
+						 Analysis/R/Rcache/expr_corr.RData Analysis/R/Rcache/expr_corr_betw_tissues.RData \
+						 Analysis/R/Rcache/expr_corr_counts.RData Analysis/R/Rcache/expr_corr_within_tissues.RData \
+						 Analysis/R/Rcache/expr_mixup_summaries.RData Analysis/R/Rcache/expr_tab.RData \
+						 Analysis/R/Rcache/f2g.RData Analysis/R/Rcache/f2g_sexcorrection.RData \
+						 Analysis/R/Rcache/f2gc.RData Analysis/R/Rcache/locallod.RData \
+						 Analysis/R/Rcache/insulin_scan.RData Analysis/R/Rcache/neqtl_new.RData \
+						 Analysis/R/Rcache/neqtl_new_10.RData Analysis/R/Rcache/neqtl_old.RData \
+						 Analysis/R/Rcache/neqtl_old_10.RData Analysis/R/Rcache/pmark.RData \
+						 Analysis/R/Rcache/tufted_scan.RData Analysis/R/Rcache/tufted_tab.RData
+	zip $@ $^
+
 ### pdf files
 pdf: samplemixups.pdf samplemixups_supp.pdf samplemixups_wsupp.pdf
 
