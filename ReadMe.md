@@ -8,7 +8,7 @@ The paper will appear at [G3](http://g3journal.org/content/early/2015/08/19/g3.1
 and is also available at [arXiv](http://arxiv.org/abs/1402.2633).
 
 **I'm still working out how to include the data, or links to the data
-  (because they're _really_ big).
+  (because they're about 2 GB compressed).
   At the moment, this isn't fully reproducible.**
 
 The data are available at the
