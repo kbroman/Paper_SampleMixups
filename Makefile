@@ -137,7 +137,7 @@ SuppFigs/figS10.eps: R/expr_scatterplots_mix.R Analysis/R/Rcache/mlratios.RData 
 SuppFigs/figS11.eps: R/expr_corr_mix.R Analysis/R/Rcache/mlratios.RData Analysis/R/Rcache/expr_corr.RData
 	cd R;R CMD BATCH --no-save expr_corr_mix.R
 
-SuppFigs/figS12.eps: R/xist_and_y.R Analysis/OrigData/annot.final.RData Analysis/R/Rcache/mlratios.RData Analysis/R/Rcache/mlratios_revised.RData Analysis/FinalData/necropsy.csv
+SuppFigs/figS12.eps: R/xist_and_y.R Analysis/OrigData/annot.amit_rev.RData Analysis/R/Rcache/mlratios.RData Analysis/R/Rcache/mlratios_revised.RData Analysis/FinalData/necropsy.csv
 	cd R;R CMD BATCH --no-save xist_and_y.R
 
 SuppFigs/figS13.eps: R/gve_supp.R Analysis/R/Rcache/dgve.RData Analysis/R/Rcache/pmark.RData
