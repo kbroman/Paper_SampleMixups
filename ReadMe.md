@@ -36,6 +36,16 @@ Cached intermediate results are available at figshare:
 
 ---
 
+## Necessary tools
+
+- [R](https://www.r-project.org)
+- Perl
+- Python 2.7
+- [Asciidoc](http://www.methods.co.nz/asciidoc/)
+- R packages: knitr, qtl, broman, lineup, ascii, data.table
+
+---
+
 ## To Do
 
 - Finalize R script that grabs data from MPD and convert to form needed for rest
