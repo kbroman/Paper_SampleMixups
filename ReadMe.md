@@ -38,13 +38,12 @@ Cached intermediate results are available at figshare:
 
 ## To Do
 
-- R script to grab data from MPD and convert to form needed for rest
-  of the scripts
+- Finalize R script that grabs data from MPD and convert to form needed for rest
+  of the scripts (including creating mlratios.RData and mlratios_revised.RData)
 
 - Seem to rely on old annotations in some bits; fix this
 
-- Create zip file with all of the intermediate files (put on figshare?)
-
 - Do clean tests, with and without the intermediate files
 
-- Rename some stuff to make it cleaner?
+- R code for figures and supp'l figs: in ReadMes, explain which file
+  is for what
