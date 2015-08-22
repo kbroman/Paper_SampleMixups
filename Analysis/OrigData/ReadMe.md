@@ -12,3 +12,9 @@ no corrections of sample mix-ups within cross: Cox et al map
 genotypes; `SexID` is the sex from the individual identifiers)
 
 `rawg.RData`: has even more raw genotypes, including info on sex-swapped mice
+
+[`plateinfo.csv`](plateinfo.csv) (included in the repository) contains
+information about the positions of samples in the genotyping plates.
+These data are contained within the `genotypes_veryraw.csv` file at
+the Mouse Phenome Database, but here they've been split apart into a
+more easy-to-use form.
