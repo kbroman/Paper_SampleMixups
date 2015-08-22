@@ -54,6 +54,24 @@ save(list=paste0(tissues, ".mlratio"), file.path("Rcache", "mlratios.RData"))
 # read very raw genotypes and make some slight changes
 suppressWarnings(rawg <- read.cross("csv", file.path(dir, "Raw"), "genotypes_veryraw.csv",
                                     genotypes=0:2, convertXdata=FALSE))
+# save plate info
+longid <- as.character(rawg$pheno$longid)
+platepos <- as.character(rawg$pheno$PlatePos)
+mousenum <- sapply(strsplit(longid, "_"), function(a) a[[2]])
+plate <- as.character(as.numeric(sapply(strsplit(platepos, "[_:]"), function(a) a[2])))
+well <- sapply(strsplit(platepos, "[_:]"), function(a) a[3])
+strain <- sapply(strsplit(longid, "[_:]"), function(a) a[3])
+strain[longid == "MouseKitControl_755356"] <- "CNTL"
+plateinfo <- data.frame(longid=longid,
+                        platepos=platepos,
+                        mousenum=mousenum,
+                        plate=plate,
+                        well=well,
+                        strain=strain,
+                        stringsAsFactors=FALSE)
+write.table(plateinfo, file=file.path("..", "OrigData", "plateinfo.csv"),
+          row.names=FALSE, col.names=TRUE, sep=",", quote=FALSE)
+
 # reorder chromosomes
 rawg$geno <- rawg$geno[c(1:19, "X", "un")]
 # drop uninformative markers from X
