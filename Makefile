@@ -94,7 +94,7 @@ Figs/fig5.eps: R/gve.R Analysis/R/Rcache/dgve.RData Analysis/R/Rcache/pmark.RDat
 Figs/fig6.eps: R/gve_similarity.R Analysis/R/Rcache/dgve_min_and_self.RData
 	cd R;R CMD BATCH --no-save gve_similarity.R
 
-Figs/fig7.eps: R/genotype_plates.R R/genotype_plates_arrows.csv Analysis/R/calls.RData
+Figs/fig7.eps: R/genotype_plates.R R/genotype_plates_arrows.csv Analysis/R/calls.RData Analysis/OrigData/plateinfo.csv
 	cd R;R CMD BATCH --no-save genotype_plates.R
 
 Figs/fig8.eps: R/insulin_lod.R R/my_plot_scanone.R Analysis/R/Rcache/insulin_scan.RData
@@ -174,5 +174,5 @@ cleanall: clean
 	\rm -f *.pdf Figs/*.eps Figs/*.pdf SuppFigs/*.pdf
 
 ### proposed figure for G3 cover
-Figs/cover.tiff: R/cover_fig.R
+Figs/cover.tiff: R/cover_fig.R Analysis/OrigData/plateinfo.csv
 	cd R;R CMD BATCH --no-save cover_fig.R

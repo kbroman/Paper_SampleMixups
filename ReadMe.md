@@ -49,7 +49,4 @@ Cached intermediate results are available at figshare:
 
 ## To Do
 
-- Finalize R script that grabs data from MPD and convert to form needed for rest
-  of the scripts (including creating mlratios.RData and mlratios_revised.RData)
-
 - Do clean tests, with and without the intermediate files

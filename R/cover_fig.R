@@ -5,16 +5,13 @@ calls <- sub("\\*", "", calls)
 library(igraph)
 iArrows <- igraph:::igraph.Arrows
 
-
-library(B6BTBR07a)
-data(topstuff)
-
-ts.mousenum <- sapply(strsplit(rownames(topstuff), "_"), function(a) a[[2]])
-ts.plate <- as.character(as.numeric(sapply(strsplit(as.character(topstuff[,3]), "[_:]"), function(a) a[2])))
-ts.well <- sapply(strsplit(as.character(topstuff[,3]), "[_:]"), function(a) a[3])
-
-ts.strain <- sapply(strsplit(rownames(topstuff), "[_:]"), function(a) a[3])
-ts.strain[rownames(topstuff) == "MouseKitControl_755356"] <- "CNTL"
+# plate information
+library(data.table)
+plateinfo <- fread("../Analysis/OrigData/plateinfo.csv", header=TRUE, data.table=FALSE)
+ts.mousenum <- plateinfo$mousenum
+ts.plate <- plateinfo$plate
+ts.well <- plateinfo$well
+ts.strain <- plateinfo$strain
 
 ro.plate <- ts.plate[match(rownames(calls), ts.mousenum)]
 ro.well <- ts.well[match(rownames(calls), ts.mousenum)]
