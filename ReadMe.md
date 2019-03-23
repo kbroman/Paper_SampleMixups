@@ -6,8 +6,20 @@ Paper: Identification and correction of sample mix-ups in expression genetic dat
 The full manuscript (with supplementary tables and figures) is
 [here](http://www.biostat.wisc.edu/~kbroman/publications/samplemixups_wsupp.pdf).
 
-The paper will appear at [G3](http://g3journal.org/content/early/2015/08/19/g3.115.019778.abstract),
-and is also available at [arXiv](http://arxiv.org/abs/1402.2633).
+The paper is available at [arXiv](http://arxiv.org/abs/1402.2633) and
+as a formal journal article at
+[G3](http://g3journal.org/content/early/2015/08/19/g3.115.019778.abstract):
+
+> Broman KW, Keller MP, Broman AT, Kendziorski C, Yandell BS, Sen
+> &#346;, Attie AD (2015) Identification and correction of sample
+> mix-ups in expression genetic data: A case study.
+> [G3](http://g3journal.org) 5:2177-2186
+> [![PubMed](https://kbroman.org/pages/icons16/pubmed-icon.png)](https://www.ncbi.nlm.nih.gov/pubmed/26290572)
+> [![pdf](https://kbroman.org/pages/icons16/pdf-icon.png)](http://www.g3journal.org/content/ggg/5/10/2177.full.pdf)
+> [![data](https://kbroman.org/pages/icons16/data-icon.png)](http://bit.ly/B6BTBR)
+> [![R/lineup software](https://kbroman.org/pages/icons16/R-icon.png)](https://github.com/kbroman/lineup)
+> [![doi](https://kbroman.org/pages/icons16/doi-icon.png)](https://doi.org/10.1534/g3.115.019778)
+
 
 **I'm still working out how to include the data, or links to the data
   (because they're about 2 GB compressed).
