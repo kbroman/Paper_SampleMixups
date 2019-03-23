@@ -1,7 +1,7 @@
 Paper: Identification and correction of sample mix-ups in expression genetic data
 ---------------------------------------------------------------------------------
 
-[![doi badge](https://zenodo.org/badge/DOI/10.5281/zenodo.2603995.svg)](https://doi.org/10.5281/zenodo.2603995)
+[![doi badge](https://zenodo.org/badge/DOI/10.5281/zenodo.2603993.svg)](https://doi.org/10.5281/zenodo.2603993)
 
 The full manuscript (with supplementary tables and figures) is
 [here](http://www.biostat.wisc.edu/~kbroman/publications/samplemixups_wsupp.pdf).
