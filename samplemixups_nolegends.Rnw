@@ -555,7 +555,7 @@ sample from each pair.
 % how many individuals have expression and genotype data?
 <<which_tissues, echo=FALSE, results="hide">>=
 tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
-mice <- sapply(tissues, function(a) colnames(get(paste.(a, "mlratio"))))
+mice <- lapply(tissues, function(a) colnames(get(paste(a, "mlratio", sep="."))))
 allmice <- sort(unique(unlist(mice)))
 m <- sapply(mice, function(a,b) match(b, a), allmice)
 kidneyonly <- sum(!is.na(m[,5]) & rowSums(is.na(m[,-5]))==5)
