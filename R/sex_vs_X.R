@@ -1,5 +1,6 @@
 # figure with X chromosome genotypes inconsistent with sex
 
+library(qtl)
 rm(list=ls())
 source("colors.R")
 

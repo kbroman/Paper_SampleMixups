@@ -18,7 +18,7 @@ for(i in ind) {
       inum <- sub("Mouse", "", i)
       jnum <- sub("Mouse", "", j)
       plot(0,0,
-           xlab="", ylab="", xlim=c(-2.1, 2.1), ylim=c(-2.1,2.1), 
+           xlab="", ylab="", xlim=c(-2.1, 2.1), ylim=c(-2.1,2.1),
            xaxt="n", yaxt="n", xaxs="i", yaxs="i",
            type="n")
       plim <- par("usr")
@@ -40,9 +40,9 @@ for(i in ind) {
       tp <- paste0(substr(tissues[k], 1, 1), substr(tissue, 1, 1))
       if(!(tp %in% colnames(expr.corr)))
         tp <- paste0(substr(tissue, 1, 1), substr(tissues[k], 1, 1))
-      
+
       wh <- which(expr.corr[,tp] > 0.75)
-      points(get(arr[tissue.index])[i,wh], get(arr[k])[j,wh], bg=sexcolor[2], pch=21)
+      points(get(arr[tissue.index])[wh,i], get(arr[k])[wh,j], bg=sexcolor[2], pch=21)
 
       rect(plim[1], plim[3], plim[2], plim[4], col=NA)
     }

@@ -8,6 +8,8 @@ library(lineup)
 attach("../Analysis/FinalData/islet_mlratio_final.RData")
 attach("../Analysis/FinalData/aligned_geno_with_pmap.RData")
 
+library(qtl)
+f2g$pheno$id <- f2g$pheno$MouseNum
 id <- findCommonID(f2g, islet.mlratio)
 
 postscript("../SuppFigs/figS18.eps", height=9.75, width=6.5,

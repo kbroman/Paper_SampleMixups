@@ -24,8 +24,8 @@ if(file.exists(file)) {
       rownames(corr.mix)[kk] <- paste(i, "vs.", j)
       for(k in 1:nrow(tissuepairs)) {
         wh <- which(expr.corr[,k] > 0.75)
-        corr.mix[kk,k] <- cor(get(arr[tissuepairs[k,1]])[i,wh],
-                          get(arr[tissuepairs[k,2]])[j,wh],
+        corr.mix[kk,k] <- cor(get(arr[tissuepairs[k,1]])[wh,i],
+                          get(arr[tissuepairs[k,2]])[wh,j],
                           use="complete")
       }
       kk <- kk + 1
@@ -36,8 +36,8 @@ if(file.exists(file)) {
   for(k in 1:6) {
     wh <- which(tissuepairs[,1]==tissues[k] | tissuepairs[,2]==tissues[k])
     wh <- which(apply(expr.corr[,wh], 1, max) > 0.75)
-    corr.mix.onetissue[k] <- cor(get(arr[k])[ind[1],wh],
-                                 get(arr[k])[ind[2],wh],
+    corr.mix.onetissue[k] <- cor(get(arr[k])[wh,ind[1]],
+                                 get(arr[k])[wh,ind[2]],
                                  use="complete")
   }
 
