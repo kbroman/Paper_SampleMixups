@@ -41,6 +41,8 @@
 
 %%%%%%%%% knitr stuff %%%%%%%%%%%%%%%%%
 <<options, echo=FALSE, results="hide">>=
+library(qtl)
+library(lineup)
 library(knitr)
 opts_chunk$set(message=FALSE)
 options(width=87, digits=3, scipen=4)
