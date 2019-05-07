@@ -426,7 +426,7 @@ file <- "R/Rcache/n_bad_hypo.RData"
 if(file.exists(file)) {
   load(file)
 } else {
-  n.bad.hypo <- sum(apply(hypo.mlratio, 1, function(a) median(a[!is.na(a) & a > -2 & a < 2]) > 0.016))
+  n.bad.hypo <- sum(apply(hypo.mlratio, 2, function(a) median(a[!is.na(a) & a > -2 & a < 2]) > 0.016))
   save(n.bad.hypo, file=file)
 }
 @
@@ -555,7 +555,7 @@ sample from each pair.
 % how many individuals have expression and genotype data?
 <<which_tissues, echo=FALSE, results="hide">>=
 tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
-mice <- sapply(tissues, function(a) rownames(get(paste.(a, "mlratio"))))
+mice <- sapply(tissues, function(a) colnames(get(paste.(a, "mlratio"))))
 allmice <- sort(unique(unlist(mice)))
 m <- sapply(mice, function(a,b) match(b, a), allmice)
 kidneyonly <- sum(!is.na(m[,5]) & rowSums(is.na(m[,-5]))==5)
@@ -581,9 +581,9 @@ but were not subject to gene expression analysis.
 
 <<example_all_vs_subset_probes, echo=FALSE, results="hide">>=
 attach("Analysis/R/Rcache/expr_corr.RData")
-cor.all <- cor(kidney.mlratio["Mouse3567",], liver.mlratio["Mouse3567",], use="complete")
+cor.all <- cor(kidney.mlratio[,"Mouse3567"], liver.mlratio[,"Mouse3567"], use="complete")
 wh <- which(expr.corr[,"kl"] > 0.75)
-cor.sub <- cor(kidney.mlratio["Mouse3567",wh], liver.mlratio["Mouse3567",wh], use="complete")
+cor.sub <- cor(kidney.mlratio[wh,"Mouse3567"], liver.mlratio[wh,"Mouse3567"], use="complete")
 n.gt.0.75 <- apply(expr.corr, 2, function(a) sum(a > 0.75))
 @
 
@@ -594,7 +594,7 @@ correlations.  Consideration of all probes would greatly reduce the
 apparent correlation between arrays, due to the abundance of
 unexpressed genes.  For example, for Mouse3567, the correlation
 between gene expression in kidney and in liver, across all
-\Sexpr{ncol(kidney.mlratio) %/% 1000},\Sexpr{ncol(kidney.mlratio) %% 1000}
+\Sexpr{nrow(kidney.mlratio) %/% 1000},\Sexpr{nrow(kidney.mlratio) %% 1000}
 probes, is \Sexpr{sprintf("%.2f", cor.all)}, while for the subset of
 \Sexpr{length(wh)}~probes with correlation $>$ 0.75 between kidney and
 liver, the correlation is \Sexpr{sprintf("%.2f", cor.sub)}.  (See Figure~S3.)
