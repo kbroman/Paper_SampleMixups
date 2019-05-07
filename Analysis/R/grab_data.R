@@ -4,7 +4,7 @@
 library(data.table)
 library(qtl)
 
-mpd_url <- "http://phenome.jax.org/grpdoc_qtla/attie_2015"
+mpd_url <- "https://phenomedoc.jax.org/QTL_Archive/attie_2015/"
 raw_zipfile <- "Attie_2015_eqtl_raw.zip"
 clean_zipfile <- "Attie_2015_eqtl_clean.zip"
 tissues <- c("adipose", "gastroc", "hypo", "islet", "kidney", "liver")
