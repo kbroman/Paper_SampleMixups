@@ -21,10 +21,6 @@ as a formal journal article at
 > [![doi](https://kbroman.org/pages/icons16/doi-icon.png)](https://doi.org/10.1534/g3.115.019778)
 
 
-**I'm still working out how to include the data, or links to the data
-  (because they're about 2 GB compressed).
-  At the moment, this isn't fully reproducible.**
-
 The data are available at the
 [Mouse Phenome Database](http://phenome.jax.org/db/q?rtn=projects/projdet&reqprojid=532),
 though not in exactly the form used in this repository.
@@ -38,15 +34,31 @@ adds all of the legends, and then the `.Rnw` file is run through
 LaTeX file, and the two LaTeX files are sent through `pdflatex` and
 `xelatex`, respectively, to create PDFs.
 
-The `Makefile` tells the full story.
-
-The `Analysis/R` subdirectory has an
+Things are a bit tricky. In principle, the `Makefile` tells the full
+story, but the `Analysis/R` subdirectory has an
 [asciidoc](http://www.methods.co.nz/asciidoc/) file for the analyses
-in the work. That directory has its own `Makefile`.
-
-Cached intermediate results are available at figshare:
+in the work. That directory has its own `Makefile`. Cached
+intermediate results are available at figshare:
 [`samplemixups_rcache.zip`](http://files.figshare.com/2219404/samplemixups_rcache.zip)
-(This contains a bunch of `.RData` files that go in `Analysis/R/Rcache`.)
+(This contains a bunch of `.RData` files that go in
+`Analysis/R/Rcache`.)
+
+To compile everything, you can:
+
+1. Download the cached intermediate results,
+   [`samplemixups_rcache.zip`](http://files.figshare.com/2219404/samplemixups_rcache.zip)
+   and unzip them. This will populate `Analysis/R/Rcache`.
+
+2. In `Analysis/R`, run
+
+   ```shell
+   R CMD BATCH grab_data.R
+   ```
+
+   This will download the primary data files. It's quite slow, as it's
+   2 GB of data to download.
+
+3. In the primary directory, run `make`.
 
 ---
 
