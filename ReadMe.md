@@ -14,11 +14,11 @@ as a formal journal article at
 > &#346;, Attie AD (2015) Identification and correction of sample
 > mix-ups in expression genetic data: A case study.
 > [G3](http://g3journal.org) 5:2177-2186
-> [![PubMed](https://kbroman.org/pages/icons16/pubmed-icon.png)](https://www.ncbi.nlm.nih.gov/pubmed/26290572)
-> [![pdf](https://kbroman.org/pages/icons16/pdf-icon.png)](http://www.g3journal.org/content/ggg/5/10/2177.full.pdf)
-> [![data](https://kbroman.org/pages/icons16/data-icon.png)](http://bit.ly/B6BTBR)
-> [![R/lineup software](https://kbroman.org/pages/icons16/R-icon.png)](https://github.com/kbroman/lineup)
-> [![doi](https://kbroman.org/pages/icons16/doi-icon.png)](https://doi.org/10.1534/g3.115.019778)
+> [![PubMed](https://kbroman.org/icons16/pubmed-icon.png)](https://www.ncbi.nlm.nih.gov/pubmed/26290572)
+> [![pdf](https://kbroman.org/icons16/pdf-icon.png)](http://www.g3journal.org/content/ggg/5/10/2177.full.pdf)
+> [![data](https://kbroman.org/icons16/data-icon.png)](http://bit.ly/B6BTBR)
+> [![R/lineup software](https://kbroman.org/icons16/R-icon.png)](https://github.com/kbroman/lineup)
+> [![doi](https://kbroman.org/icons16/doi-icon.png)](https://doi.org/10.1534/g3.115.019778)
 
 
 The data are available at the
